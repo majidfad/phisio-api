@@ -1,0 +1,148 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: production-deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  deploy:
+    name: Build and deploy API
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set image owner
+        run: echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/phisio-api:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/phisio-api:${{ github.event.workflow_run.head_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Copy compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: deploy/docker-compose.prod.yml
+          target: /opt/phisio-api/
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+          JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: REGISTRY,IMAGE_OWNER,IMAGE_TAG,POSTGRES_PASSWORD,JWT_SECRET_KEY,JWT_ISSUER,JWT_AUDIENCE,GHCR_PULL_TOKEN,GITHUB_ACTOR
+          script: |
+            set -euo pipefail
+            cd /opt/phisio-api
+
+            if [ -f deploy/docker-compose.prod.yml ]; then
+              mv -f deploy/docker-compose.prod.yml docker-compose.prod.yml
+              rmdir deploy 2>/dev/null || true
+            fi
+
+            if [ ! -f docker-compose.prod.yml ] || [ ! -f .env ]; then
+              echo "Missing /opt/phisio-api/docker-compose.prod.yml or .env"
+              exit 1
+            fi
+
+            if [ -n "${GHCR_PULL_TOKEN:-}" ]; then
+              echo "${GHCR_PULL_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+            fi
+
+            export PHISIO_API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/phisio-api:${IMAGE_TAG}"
+
+            if [ -n "${POSTGRES_PASSWORD:-}" ]; then
+              if grep -q '^POSTGRES_PASSWORD=' .env; then
+                sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
+              else
+                echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+              fi
+            fi
+
+            if [ -n "${JWT_SECRET_KEY:-}" ]; then
+              if grep -q '^JWT_SECRET_KEY=' .env; then
+                sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=${JWT_SECRET_KEY}|" .env
+              else
+                echo "JWT_SECRET_KEY=${JWT_SECRET_KEY}" >> .env
+              fi
+            fi
+
+            if [ -n "${JWT_ISSUER:-}" ]; then
+              if grep -q '^JWT_ISSUER=' .env; then
+                sed -i "s|^JWT_ISSUER=.*|JWT_ISSUER=${JWT_ISSUER}|" .env
+              else
+                echo "JWT_ISSUER=${JWT_ISSUER}" >> .env
+              fi
+            fi
+
+            if [ -n "${JWT_AUDIENCE:-}" ]; then
+              if grep -q '^JWT_AUDIENCE=' .env; then
+                sed -i "s|^JWT_AUDIENCE=.*|JWT_AUDIENCE=${JWT_AUDIENCE}|" .env
+              else
+                echo "JWT_AUDIENCE=${JWT_AUDIENCE}" >> .env
+              fi
+            fi
+
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml ps
+
+            for i in $(seq 1 30); do
+              if docker compose -f docker-compose.prod.yml exec -T api curl -fsS http://localhost:8080/api/health > /dev/null; then
+                echo "API health check passed"
+                exit 0
+              fi
+              sleep 5
+            done
+
+            echo "API health check failed"
+            docker compose -f docker-compose.prod.yml logs --tail=100
+            exit 1

@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Phisio.Domain</RootNamespace>
+    <AssemblyName>Phisio.Domain</AssemblyName>
+  </PropertyGroup>
+
+</Project>

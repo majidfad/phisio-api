@@ -1,0 +1,12 @@
+**/.git
+**/.github
+**/.cursor
+**/bin
+**/obj
+**/.vs
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/deploy/.env
+Phisio.Tests
