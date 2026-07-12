@@ -1,6 +1,9 @@
 # Phisio API (Backend)
 
-ASP.NET Core 8 API for the Phisio physiotherapy platform.
+Standalone backend repository for the Phisio physiotherapy platform.
+
+**Location:** `c:\Users\Mahboubeh\source\repos\phisio-api`  
+**Frontend repo:** [phisio-web](https://github.com/majidfad/phisio-web)
 
 ## Stack
 
