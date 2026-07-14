@@ -143,9 +143,16 @@ jobs:
               exit 1
             fi
 
+            echo "Removing old API image(s) before deploy..."
+            docker compose -f docker-compose.prod.yml --env-file .env stop api || true
+            docker compose -f docker-compose.prod.yml --env-file .env rm -f api || true
+            docker images "${REGISTRY}/${IMAGE_OWNER}/phisio-api" -q | sort -u | xargs -r docker rmi -f || true
+
             docker compose -f docker-compose.prod.yml --env-file .env pull
             docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
             docker compose -f docker-compose.prod.yml --env-file .env ps
+
+            docker image prune -f || true
 
             for i in $(seq 1 30); do
               if docker compose -f docker-compose.prod.yml --env-file .env exec -T api curl -fsS http://localhost:8080/api/health > /dev/null; then
