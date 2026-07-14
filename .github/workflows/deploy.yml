@@ -131,12 +131,24 @@ jobs:
               fi
             fi
 
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker compose -f docker-compose.prod.yml ps
+            # Empty Action secrets override .env; unset so compose reads the file.
+            if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD; fi
+            if [ -z "${JWT_SECRET_KEY:-}" ]; then unset JWT_SECRET_KEY; fi
+            if [ -z "${JWT_ISSUER:-}" ]; then unset JWT_ISSUER; fi
+            if [ -z "${JWT_AUDIENCE:-}" ]; then unset JWT_AUDIENCE; fi
+            if [ -z "${GHCR_PULL_TOKEN:-}" ]; then unset GHCR_PULL_TOKEN; fi
+
+            if ! grep -qE '^POSTGRES_PASSWORD=.+' .env; then
+              echo "POSTGRES_PASSWORD is empty in /opt/phisio-api/.env (and secret is unset)"
+              exit 1
+            fi
+
+            docker compose -f docker-compose.prod.yml --env-file .env pull
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml --env-file .env ps
 
             for i in $(seq 1 30); do
-              if docker compose -f docker-compose.prod.yml exec -T api curl -fsS http://localhost:8080/api/health > /dev/null; then
+              if docker compose -f docker-compose.prod.yml --env-file .env exec -T api curl -fsS http://localhost:8080/api/health > /dev/null; then
                 echo "API health check passed"
                 exit 0
               fi
@@ -144,5 +156,5 @@ jobs:
             done
 
             echo "API health check failed"
-            docker compose -f docker-compose.prod.yml logs --tail=100
+            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=100
             exit 1
