@@ -30,6 +30,17 @@ migrate_volume() {
   echo "==> Migrated ${old_name} -> ${new_name}"
 }
 
+is_placeholder_image() {
+  local value="$1"
+  [[ -z "${value}" \
+    || "${value}" == "phisio-api:local" \
+    || "${value}" == "phisio-web:local" \
+    || "${value}" == "phisio-web:pending" \
+    || "${value}" == *:local \
+    || "${value}" == *:pending \
+    || "${value}" != ghcr.io/* ]]
+}
+
 merge_env_key() {
   local src_file="$1"
   local key="$2"
@@ -45,15 +56,43 @@ merge_env_key() {
     return 0
   fi
 
+  local incoming="${line#*=}"
+  if [[ "${key}" == PHISIO_*_IMAGE ]] && is_placeholder_image "${incoming}"; then
+    return 0
+  fi
+
   if grep -qE "^${key}=" "${dest_file}" 2>/dev/null; then
     local existing
     existing="$(grep -E "^${key}=" "${dest_file}" | cut -d= -f2-)"
-    if [[ -n "${existing}" && "${existing}" != "change-me-strong-password" && "${existing}" != change-me-* && "${existing}" != "phisio-web:pending" && "${existing}" != "phisio-api:local" ]]; then
-      return 0
+    if [[ -n "${existing}" ]] && ! is_placeholder_image "${existing}"; then
+      if [[ "${existing}" != change-me-* && "${existing}" != "change-me-strong-password" ]]; then
+        return 0
+      fi
+    fi
+    # For non-image keys, keep real secrets; for images allow replace when placeholder.
+    if [[ "${key}" != PHISIO_*_IMAGE ]]; then
+      if [[ -n "${existing}" && "${existing}" != "change-me-strong-password" && "${existing}" != change-me-* ]]; then
+        return 0
+      fi
     fi
     sed -i "s|^${key}=.*|${line}|" "${dest_file}"
   else
     echo "${line}" >> "${dest_file}"
+  fi
+}
+
+clear_bad_image_ref() {
+  local key="$1"
+  local file="$2"
+  if ! grep -qE "^${key}=" "${file}" 2>/dev/null; then
+    echo "${key}=" >> "${file}"
+    return 0
+  fi
+  local value
+  value="$(grep -E "^${key}=" "${file}" | cut -d= -f2-)"
+  if is_placeholder_image "${value}"; then
+    echo "==> Clearing invalid ${key}=${value}"
+    sed -i "s|^${key}=.*|${key}=|" "${file}"
   fi
 }
 
@@ -71,7 +110,6 @@ ensure_dir() {
 
 ensure_dir
 
-# Prefer files shipped next to this script (CI copies them into APP_DIR).
 if [[ -f "${SCRIPT_DIR}/docker-compose.prod.yml" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; then
   cp -f "${SCRIPT_DIR}/docker-compose.prod.yml" "${APP_DIR}/docker-compose.prod.yml"
 fi
@@ -79,7 +117,6 @@ if [[ -f "${SCRIPT_DIR}/.env.example" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; the
   cp -f "${SCRIPT_DIR}/.env.example" "${APP_DIR}/.env.example"
 fi
 
-# Flatten CI scp layout: /opt/phisio/deploy/*
 if [[ -f "${APP_DIR}/deploy/docker-compose.prod.yml" ]]; then
   mv -f "${APP_DIR}/deploy/docker-compose.prod.yml" "${APP_DIR}/docker-compose.prod.yml"
 fi
@@ -119,16 +156,23 @@ if [[ -f "${OLD_WEB_DIR}/.env" ]]; then
   done
 fi
 
+if ! grep -qE '^COMPOSE_PROJECT_NAME=' "${APP_DIR}/.env"; then
+  echo 'COMPOSE_PROJECT_NAME=phisio' >> "${APP_DIR}/.env"
+fi
 if ! grep -qE '^HTTP_PORT=' "${APP_DIR}/.env"; then
   echo 'HTTP_PORT=3000' >> "${APP_DIR}/.env"
-fi
-# Force public port to 3000 for the unified stack unless already 3000.
-if grep -qE '^HTTP_PORT=' "${APP_DIR}/.env"; then
+else
   sed -i 's|^HTTP_PORT=.*|HTTP_PORT=3000|' "${APP_DIR}/.env"
 fi
-if ! grep -qE '^PHISIO_WEB_IMAGE=' "${APP_DIR}/.env"; then
-  echo 'PHISIO_WEB_IMAGE=phisio-web:pending' >> "${APP_DIR}/.env"
+if ! grep -qE '^PHISIO_API_IMAGE=' "${APP_DIR}/.env"; then
+  echo 'PHISIO_API_IMAGE=' >> "${APP_DIR}/.env"
 fi
+if ! grep -qE '^PHISIO_WEB_IMAGE=' "${APP_DIR}/.env"; then
+  echo 'PHISIO_WEB_IMAGE=' >> "${APP_DIR}/.env"
+fi
+
+clear_bad_image_ref PHISIO_API_IMAGE "${APP_DIR}/.env"
+clear_bad_image_ref PHISIO_WEB_IMAGE "${APP_DIR}/.env"
 
 if command -v docker >/dev/null 2>&1; then
   echo "==> Stopping legacy stacks (if present) before volume migration"

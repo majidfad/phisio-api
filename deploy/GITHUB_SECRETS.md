@@ -7,30 +7,54 @@
 | `DEPLOY_SSH_KEY` | Private SSH key |
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 | `JWT_SECRET_KEY` | JWT signing key (min 32 chars) |
-| `GHCR_PULL_TOKEN` | PAT with `read:packages` for server image pull |
+| `GHCR_PULL_TOKEN` | PAT with `read:packages` so the VPS can pull from GHCR |
 
 Optional: `JWT_ISSUER`, `JWT_AUDIENCE`
 
-Deploy path on server: `/opt/phisio` (single compose for postgres + api + web)
+Deploy path: `/opt/phisio`
 
-## What CI does (no manual server bootstrap)
+## Image strategy (best practice)
 
-On each successful API deploy to `main`, GitHub Actions will:
+- CI builds and pushes to **GHCR**: `ghcr.io/<owner>/phisio-api:<git-sha>` (+ `:latest`)
+- Server **never builds** app images and never uses `*:local`
+- Deploy writes the SHA image into `/opt/phisio/.env` as `PHISIO_API_IMAGE` / `PHISIO_WEB_IMAGE`
+- Compose uses `pull_policy: missing` (CI still runs an explicit `pull`)
+- `web` is behind Compose profile `web` (API deploy starts only `postgres` + `api`)
 
-1. Create `/opt/phisio` if missing
-2. Copy compose + `.env.example` + bootstrap script
-3. Stop legacy `/opt/phisio-api` and `/opt/phisio-web` stacks
-4. Migrate Postgres/upload volumes into `phisio_pgdata` / `phisio_uploads`
-5. Create/merge `.env` (secrets from GitHub + legacy `.env` values)
-6. Pull and start only `postgres` + `api` (leaves `web` alone)
-7. Remove old API images
+## What CI does
 
-Web deploys (phisio-web) only update the `web` service afterward.
+1. Create `/opt/phisio` if missing  
+2. Bootstrap (migrate legacy volumes, sanitize bad image refs)  
+3. Login to GHCR on the server  
+4. Set `PHISIO_API_IMAGE=ghcr.io/.../phisio-api:<sha>`  
+5. Pull + start `postgres` + `api`  
+6. Prune unused images  
 
-## Server prerequisites (one-time, outside this app)
+Web CI sets `PHISIO_WEB_IMAGE=ghcr.io/.../phisio-web:<sha>` and runs `compose --profile web up`.
 
-- Docker + Docker Compose plugin installed
-- `DEPLOY_USER` can SSH and run Docker
-- Able to create `/opt/phisio` (passwordless `sudo mkdir`/`chown`, or pre-create the dir)
-- GitHub secrets listed above configured in **both** repos (same host/key)
-- Optionally open TCP **3000** in the firewall / cloud security group
+## Manual commands on the server
+
+```bash
+cd /opt/phisio
+# After CI has written real GHCR refs into .env:
+docker compose -f docker-compose.prod.yml --env-file .env up -d postgres api
+docker compose -f docker-compose.prod.yml --env-file .env --profile web up -d --no-deps web
+```
+
+Do not set `PHISIO_API_IMAGE=phisio-api:local`.
+
+## Connect to Postgres (SSH tunnel)
+
+```bash
+ssh -L 5432:127.0.0.1:5432 DEPLOY_USER@DEPLOY_HOST
+```
+
+Host `127.0.0.1`, port `5432`, db/user from `.env`, password = `POSTGRES_PASSWORD`. Do not open 5432 publicly.
+
+## Server prerequisites
+
+- Docker + Compose plugin  
+- `DEPLOY_USER` can run Docker  
+- Can create `/opt/phisio`  
+- Firewall/cloud SG: TCP **3000** only (not 5432)  
+- GHCR packages readable with `GHCR_PULL_TOKEN` (or public packages)

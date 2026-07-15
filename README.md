@@ -24,9 +24,10 @@ docker build -t phisio-api:local .
 
 ## Production deploy
 
-Unified Docker Compose at `/opt/phisio` (postgres + api + web). This repo owns the compose file.
+Unified stack at `/opt/phisio`. Images are built in CI and pulled from **GHCR** (SHA tags in `.env`).
 
-Push to `main` after CI passes — the Deploy workflow bootstraps the server, migrates legacy volumes, and updates `postgres` + `api`. Web CI (phisio-web) updates only `web`.
+Push `main` → Deploy bootstraps the server, migrates data if needed, pulls `ghcr.io/.../phisio-api:<sha>`, starts `postgres` + `api`. Web CI updates the `web` profile only.
 
-See [deploy/GITHUB_SECRETS.md](deploy/GITHUB_SECRETS.md) for required secrets and server prerequisites.
+See [deploy/GITHUB_SECRETS.md](deploy/GITHUB_SECRETS.md).
+
 

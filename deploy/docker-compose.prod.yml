@@ -1,6 +1,10 @@
 # Unified production stack (owned by phisio-api).
 # Deploy path: /opt/phisio
-# API CI updates only postgres+api; Web CI updates only web.
+# Images must come from GHCR (set by CI) — never use *:local / *:pending on the server.
+# API CI: docker compose up -d postgres api
+# Web CI: docker compose --profile web up -d --no-deps web
+
+name: phisio
 
 x-logging: &default-logging
   driver: json-file
@@ -11,6 +15,7 @@ x-logging: &default-logging
 services:
   postgres:
     image: postgres:16-alpine
+    pull_policy: missing
     restart: unless-stopped
     command:
       - postgres
@@ -36,6 +41,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - phisio_pgdata:/var/lib/postgresql/data
+    ports:
+      # Localhost only — connect via SSH tunnel (not public).
+      - '127.0.0.1:5432:5432'
     networks:
       - phisio_internal
     shm_size: 64mb
@@ -54,7 +62,8 @@ services:
       start_period: 15s
 
   api:
-    image: ${PHISIO_API_IMAGE:?PHISIO_API_IMAGE is required}
+    image: ${PHISIO_API_IMAGE:?PHISIO_API_IMAGE must be set to a ghcr.io/... image}
+    pull_policy: missing
     container_name: phisio-api
     restart: unless-stopped
     environment:
@@ -89,7 +98,9 @@ services:
       start_period: 40s
 
   web:
-    image: ${PHISIO_WEB_IMAGE:-phisio-web:pending}
+    profiles: [web]
+    image: ${PHISIO_WEB_IMAGE:?PHISIO_WEB_IMAGE must be set to a ghcr.io/... image}
+    pull_policy: missing
     container_name: phisio-web
     restart: unless-stopped
     ports:

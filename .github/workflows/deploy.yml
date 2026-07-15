@@ -128,14 +128,42 @@ jobs:
 
             if [ -n "${GHCR_PULL_TOKEN:-}" ]; then
               echo "${GHCR_PULL_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+            else
+              echo "GHCR_PULL_TOKEN is empty — pull may fail for private packages"
             fi
 
             export PHISIO_API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/phisio-api:${IMAGE_TAG}"
+
+            case "${PHISIO_API_IMAGE}" in
+              ghcr.io/*) ;;
+              *)
+                echo "Refusing non-GHCR API image: ${PHISIO_API_IMAGE}"
+                exit 1
+                ;;
+            esac
 
             if grep -q '^PHISIO_API_IMAGE=' .env; then
               sed -i "s|^PHISIO_API_IMAGE=.*|PHISIO_API_IMAGE=${PHISIO_API_IMAGE}|" .env
             else
               echo "PHISIO_API_IMAGE=${PHISIO_API_IMAGE}" >> .env
+            fi
+
+            # Compose always interpolates profiled services; keep a valid GHCR stub until web deploys.
+            CURRENT_WEB="$(grep -E '^PHISIO_WEB_IMAGE=' .env 2>/dev/null | cut -d= -f2- || true)"
+            case "${CURRENT_WEB}" in
+              ghcr.io/*) ;;
+              *)
+                STUB_WEB="${REGISTRY}/${IMAGE_OWNER}/phisio-web:latest"
+                if grep -q '^PHISIO_WEB_IMAGE=' .env; then
+                  sed -i "s|^PHISIO_WEB_IMAGE=.*|PHISIO_WEB_IMAGE=${STUB_WEB}|" .env
+                else
+                  echo "PHISIO_WEB_IMAGE=${STUB_WEB}" >> .env
+                fi
+                ;;
+            esac
+
+            if ! grep -qE '^COMPOSE_PROJECT_NAME=' .env; then
+              echo 'COMPOSE_PROJECT_NAME=phisio' >> .env
             fi
 
             if [ -n "${POSTGRES_PASSWORD:-}" ]; then
@@ -191,12 +219,14 @@ jobs:
               exit 1
             fi
 
-            echo "Removing old API image(s) before deploy..."
+            echo "Removing previous API container/image before pull..."
             docker compose -f docker-compose.prod.yml --env-file .env stop api || true
             docker compose -f docker-compose.prod.yml --env-file .env rm -f api || true
+            # Drop old tags for this repo (keep disk small); SHA tag is pulled fresh below.
             docker images "${REGISTRY}/${IMAGE_OWNER}/phisio-api" -q | sort -u | xargs -r docker rmi -f || true
 
             docker compose -f docker-compose.prod.yml --env-file .env pull api postgres
+            # Do not start web here (profile "web").
             docker compose -f docker-compose.prod.yml --env-file .env up -d postgres api
             docker compose -f docker-compose.prod.yml --env-file .env ps
 
