@@ -16,6 +16,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  APP_DIR: /opt/phisio
 
 jobs:
   deploy:
@@ -53,21 +54,42 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Copy compose file to server
+      - name: Ensure app directory on server
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APP_DIR: ${{ env.APP_DIR }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: APP_DIR
+          script: |
+            set -euo pipefail
+            if [ ! -d "${APP_DIR}" ]; then
+              if mkdir -p "${APP_DIR}" 2>/dev/null; then
+                true
+              else
+                sudo mkdir -p "${APP_DIR}"
+                sudo chown "$(whoami):$(whoami)" "${APP_DIR}"
+              fi
+            fi
+
+      - name: Copy deploy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: deploy/docker-compose.prod.yml
-          target: /opt/phisio-api/
+          source: 'deploy/docker-compose.prod.yml,deploy/.env.example,deploy/bootstrap-server.sh'
+          target: ${{ env.APP_DIR }}/
 
-      - name: Deploy on server
+      - name: Bootstrap, migrate, and deploy on server
         uses: appleboy/ssh-action@v1.2.0
         env:
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          APP_DIR: ${{ env.APP_DIR }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
           JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
@@ -78,18 +100,29 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: REGISTRY,IMAGE_OWNER,IMAGE_TAG,POSTGRES_PASSWORD,JWT_SECRET_KEY,JWT_ISSUER,JWT_AUDIENCE,GHCR_PULL_TOKEN,GITHUB_ACTOR
+          envs: REGISTRY,IMAGE_OWNER,IMAGE_TAG,APP_DIR,POSTGRES_PASSWORD,JWT_SECRET_KEY,JWT_ISSUER,JWT_AUDIENCE,GHCR_PULL_TOKEN,GITHUB_ACTOR
           script: |
             set -euo pipefail
-            cd /opt/phisio-api
+            cd "${APP_DIR}"
+
+            if [ -f deploy/bootstrap-server.sh ]; then
+              chmod +x deploy/bootstrap-server.sh
+              bash deploy/bootstrap-server.sh
+            elif [ -f bootstrap-server.sh ]; then
+              chmod +x bootstrap-server.sh
+              bash bootstrap-server.sh
+            else
+              echo "bootstrap-server.sh missing in ${APP_DIR}"
+              exit 1
+            fi
 
             if [ -f deploy/docker-compose.prod.yml ]; then
               mv -f deploy/docker-compose.prod.yml docker-compose.prod.yml
-              rmdir deploy 2>/dev/null || true
             fi
+            rmdir deploy 2>/dev/null || true
 
             if [ ! -f docker-compose.prod.yml ] || [ ! -f .env ]; then
-              echo "Missing /opt/phisio-api/docker-compose.prod.yml or .env"
+              echo "Missing ${APP_DIR}/docker-compose.prod.yml or .env after bootstrap"
               exit 1
             fi
 
@@ -98,6 +131,12 @@ jobs:
             fi
 
             export PHISIO_API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/phisio-api:${IMAGE_TAG}"
+
+            if grep -q '^PHISIO_API_IMAGE=' .env; then
+              sed -i "s|^PHISIO_API_IMAGE=.*|PHISIO_API_IMAGE=${PHISIO_API_IMAGE}|" .env
+            else
+              echo "PHISIO_API_IMAGE=${PHISIO_API_IMAGE}" >> .env
+            fi
 
             if [ -n "${POSTGRES_PASSWORD:-}" ]; then
               if grep -q '^POSTGRES_PASSWORD=' .env; then
@@ -131,6 +170,11 @@ jobs:
               fi
             fi
 
+            sed -i 's|^HTTP_PORT=.*|HTTP_PORT=3000|' .env
+            if ! grep -qE '^HTTP_PORT=' .env; then
+              echo 'HTTP_PORT=3000' >> .env
+            fi
+
             # Empty Action secrets override .env; unset so compose reads the file.
             if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD; fi
             if [ -z "${JWT_SECRET_KEY:-}" ]; then unset JWT_SECRET_KEY; fi
@@ -139,7 +183,11 @@ jobs:
             if [ -z "${GHCR_PULL_TOKEN:-}" ]; then unset GHCR_PULL_TOKEN; fi
 
             if ! grep -qE '^POSTGRES_PASSWORD=.+' .env; then
-              echo "POSTGRES_PASSWORD is empty in /opt/phisio-api/.env (and secret is unset)"
+              echo "POSTGRES_PASSWORD is empty in ${APP_DIR}/.env (and secret is unset)"
+              exit 1
+            fi
+            if ! grep -qE '^JWT_SECRET_KEY=.+' .env; then
+              echo "JWT_SECRET_KEY is empty in ${APP_DIR}/.env (and secret is unset)"
               exit 1
             fi
 
@@ -148,8 +196,8 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env rm -f api || true
             docker images "${REGISTRY}/${IMAGE_OWNER}/phisio-api" -q | sort -u | xargs -r docker rmi -f || true
 
-            docker compose -f docker-compose.prod.yml --env-file .env pull
-            docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml --env-file .env pull api postgres
+            docker compose -f docker-compose.prod.yml --env-file .env up -d postgres api
             docker compose -f docker-compose.prod.yml --env-file .env ps
 
             docker image prune -f || true
@@ -163,5 +211,5 @@ jobs:
             done
 
             echo "API health check failed"
-            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=100
+            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=100 api postgres
             exit 1

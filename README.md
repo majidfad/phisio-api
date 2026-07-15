@@ -24,8 +24,9 @@ docker build -t phisio-api:local .
 
 ## Production deploy
 
-Deploys API + PostgreSQL to `/opt/phisio-api` on the VPS.
+Unified Docker Compose at `/opt/phisio` (postgres + api + web). This repo owns the compose file.
 
-**Deploy backend before the frontend repo** — this stack creates the shared Docker network `phisio_internal` used by the web container.
+Push to `main` after CI passes — the Deploy workflow bootstraps the server, migrates legacy volumes, and updates `postgres` + `api`. Web CI (phisio-web) updates only `web`.
 
-See [deploy/GITHUB_SECRETS.md](deploy/GITHUB_SECRETS.md) for CI/CD secrets.
+See [deploy/GITHUB_SECRETS.md](deploy/GITHUB_SECRETS.md) for required secrets and server prerequisites.
+

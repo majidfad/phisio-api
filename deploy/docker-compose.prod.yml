@@ -1,7 +1,35 @@
+# Unified production stack (owned by phisio-api).
+# Deploy path: /opt/phisio
+# API CI updates only postgres+api; Web CI updates only web.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '5m'
+    max-file: '2'
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - effective_cache_size=192MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - max_connections=40
+      - -c
+      - wal_buffers=4MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - random_page_cost=1.1
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-phisio}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -10,16 +38,20 @@ services:
       - phisio_pgdata:/var/lib/postgresql/data
     networks:
       - phisio_internal
+    shm_size: 64mb
+    mem_limit: 256m
+    cpus: 0.35
+    logging: *default-logging
     healthcheck:
       test:
         [
           'CMD-SHELL',
           'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-phisio}',
         ]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 10s
+      start_period: 15s
 
   api:
     image: ${PHISIO_API_IMAGE:?PHISIO_API_IMAGE is required}
@@ -28,6 +60,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      DOTNET_EnableDiagnostics: '0'
+      # ~220 MiB GC heap hard limit for 1GB VPS
+      DOTNET_GCHeapHardLimit: '0xDC00000'
       ConnectionStrings__DefaultConnection: >-
         Host=postgres;Port=5432;Database=${POSTGRES_DB:-phisio};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}
       JwtSettings__SecretKey: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
@@ -43,12 +78,36 @@ services:
       phisio_internal:
         aliases:
           - api
+    mem_limit: 384m
+    cpus: 0.45
+    logging: *default-logging
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8080/api/health']
-      interval: 15s
+      interval: 20s
       timeout: 5s
       retries: 10
       start_period: 40s
+
+  web:
+    image: ${PHISIO_WEB_IMAGE:-phisio-web:pending}
+    container_name: phisio-web
+    restart: unless-stopped
+    ports:
+      - '${HTTP_PORT:-3000}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - phisio_internal
+    mem_limit: 64m
+    cpus: 0.15
+    logging: *default-logging
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost/']
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 networks:
   phisio_internal:
@@ -57,4 +116,6 @@ networks:
 
 volumes:
   phisio_pgdata:
+    name: phisio_pgdata
   phisio_uploads:
+    name: phisio_uploads
