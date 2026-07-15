@@ -164,6 +164,9 @@ if ! grep -qE '^HTTP_PORT=' "${APP_DIR}/.env"; then
 else
   sed -i 's|^HTTP_PORT=.*|HTTP_PORT=3000|' "${APP_DIR}/.env"
 fi
+if ! grep -qE '^POSTGRES_PORT=' "${APP_DIR}/.env"; then
+  echo 'POSTGRES_PORT=5432' >> "${APP_DIR}/.env"
+fi
 if ! grep -qE '^PHISIO_API_IMAGE=' "${APP_DIR}/.env"; then
   echo 'PHISIO_API_IMAGE=' >> "${APP_DIR}/.env"
 fi

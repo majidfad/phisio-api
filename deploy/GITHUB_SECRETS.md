@@ -45,11 +45,17 @@ Do not set `PHISIO_API_IMAGE=phisio-api:local`.
 
 ## Connect to Postgres (SSH tunnel)
 
+Postgres is published as `127.0.0.1:${POSTGRES_PORT:-5432}` on the VPS only (default **5432**).
+
 ```bash
+# If POSTGRES_PORT=5432 (default):
 ssh -L 5432:127.0.0.1:5432 DEPLOY_USER@DEPLOY_HOST
+
+# If you set POSTGRES_PORT=5433 in /opt/phisio/.env:
+ssh -L 5433:127.0.0.1:5433 DEPLOY_USER@DEPLOY_HOST
 ```
 
-Host `127.0.0.1`, port `5432`, db/user from `.env`, password = `POSTGRES_PASSWORD`. Do not open 5432 publicly.
+Host `127.0.0.1`, port = `POSTGRES_PORT`, db/user from `.env`, password = `POSTGRES_PASSWORD`. Do not open that port publicly.
 
 ## Server prerequisites
 
