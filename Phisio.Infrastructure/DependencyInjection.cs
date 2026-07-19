@@ -32,6 +32,8 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
+        services.Configure<SeedAdminOptions>(configuration.GetSection(SeedAdminOptions.SectionName));
+
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
 

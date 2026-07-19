@@ -78,6 +78,14 @@ services:
       JwtSettings__Issuer: ${JWT_ISSUER:-Phisio.Api}
       JwtSettings__Audience: ${JWT_AUDIENCE:-Phisio.Client}
       JwtSettings__AccessTokenExpirationMinutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:-60}
+      # Initial admin seeding (optional). When no active admin exists, the API
+      # creates one at startup using these values. Set them in the server .env,
+      # e.g.:
+      #   SEED_ADMIN_PHONE_NUMBER=+10000000000
+      #   SEED_ADMIN_PASSWORD=Admin123!
+      # If left empty, seeding is skipped with a warning and startup continues.
+      SeedAdmin__PhoneNumber: ${SEED_ADMIN_PHONE_NUMBER:-}
+      SeedAdmin__Password: ${SEED_ADMIN_PASSWORD:-}
     volumes:
       - phisio_uploads:/app/uploads
     depends_on:

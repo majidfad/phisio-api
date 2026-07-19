@@ -1,370 +1,113 @@
 using Microsoft.AspNetCore.Identity;
-
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Phisio.Domain.Enums;
-
 using Phisio.Infrastructure.Identity;
-
-
 
 namespace Phisio.Infrastructure.Persistence.Seeding;
 
-
-
+/// <summary>
+/// Seeds the Admin role and, when no active admin exists, the initial admin user.
+/// Credentials come exclusively from <see cref="SeedAdminOptions"/> (the "SeedAdmin"
+/// configuration section) — nothing is hardcoded. Safe to run on every startup.
+/// </summary>
 public class IdentitySeeder
-
 {
-
-    public const string DefaultAdminEmail = "admin@phisio.com";
-
-    public const string DefaultAdminPhoneNumber = "+10000000000";
-
-    public const string DefaultAdminPassword = "Admin123!";
-
-    public const string DefaultAdminName = "System Administrator";
-
-
+    public const string AdminName = "System Administrator";
 
     private static readonly string AdminRoleName = nameof(UserRole.Admin);
 
-
-
     private readonly UserManager<ApplicationUser> _userManager;
-
     private readonly RoleManager<ApplicationRole> _roleManager;
-
-
+    private readonly SeedAdminOptions _options;
+    private readonly ILogger<IdentitySeeder> _logger;
 
     public IdentitySeeder(
-
         UserManager<ApplicationUser> userManager,
-
-        RoleManager<ApplicationRole> roleManager)
-
+        RoleManager<ApplicationRole> roleManager,
+        IOptions<SeedAdminOptions> options,
+        ILogger<IdentitySeeder> logger)
     {
-
         _userManager = userManager;
-
         _roleManager = roleManager;
-
+        _options = options.Value;
+        _logger = logger;
     }
 
-
-
     public async Task SeedAsync(CancellationToken cancellationToken = default)
-
     {
-
         cancellationToken.ThrowIfCancellationRequested();
-
-
 
         await EnsureRoleExistsAsync(cancellationToken);
 
-        await NormalizeStoredPhoneNumbersAsync(cancellationToken);
+        var adminExists = await _userManager.Users
+            .AnyAsync(u => u.Role == UserRole.Admin && u.IsEnabled, cancellationToken);
 
-
-
-        var existingUser = await FindDefaultAdminAsync(cancellationToken);
-
-        if (existingUser is not null)
-
+        if (adminExists)
         {
-
-            await EnsureDefaultAdminCredentialsAsync(existingUser, cancellationToken);
-
-            await EnsureAdminRoleAssignedAsync(existingUser, cancellationToken);
-
+            _logger.LogInformation("Admin already exists. Skipping admin seed.");
             return;
-
         }
 
-
+        if (string.IsNullOrWhiteSpace(_options.PhoneNumber)
+            || string.IsNullOrWhiteSpace(_options.Password))
+        {
+            _logger.LogWarning(
+                "Admin seed skipped because configuration is missing. " +
+                "Set SeedAdmin__PhoneNumber and SeedAdmin__Password to create the initial admin.");
+            return;
+        }
 
         var adminUser = new ApplicationUser
-
         {
-
             Id = Guid.NewGuid(),
-
-            Name = DefaultAdminName,
-
+            Name = AdminName,
             Role = UserRole.Admin,
-
+            IsEnabled = true,
             CreatedAt = DateTime.UtcNow
-
         };
 
+        UserCredentials.Apply(adminUser, _options.PhoneNumber, email: null);
 
-
-        UserCredentials.Apply(adminUser, DefaultAdminPhoneNumber, DefaultAdminEmail);
-
-
-
-        var createResult = await _userManager.CreateAsync(adminUser, DefaultAdminPassword);
-
+        var createResult = await _userManager.CreateAsync(adminUser, _options.Password);
         if (!createResult.Succeeded)
-
         {
-
-            throw new InvalidOperationException(
-
-                $"Failed to create default admin user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
-
+            _logger.LogWarning(
+                "Admin seed skipped because the configured credentials are invalid: {Errors}",
+                string.Join(", ", createResult.Errors.Select(e => e.Description)));
+            return;
         }
-
-
 
         var addRoleResult = await _userManager.AddToRoleAsync(adminUser, AdminRoleName);
-
         if (!addRoleResult.Succeeded)
-
         {
-
             await _userManager.DeleteAsync(adminUser);
-
-            throw new InvalidOperationException(
-
-                $"Failed to assign Admin role to default admin user: {string.Join(", ", addRoleResult.Errors.Select(e => e.Description))}");
-
-        }
-
-    }
-
-
-
-    private async Task NormalizeStoredPhoneNumbersAsync(CancellationToken cancellationToken)
-
-    {
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-
-
-        var users = await _userManager.Users.ToListAsync(cancellationToken);
-
-
-
-        foreach (var user in users)
-
-        {
-
-            if (string.IsNullOrWhiteSpace(user.PhoneNumber))
-
-            {
-
-                continue;
-
-            }
-
-
-
-            var canonicalPhone = UserCredentials.NormalizePhone(user.PhoneNumber);
-
-            if (user.PhoneNumber == canonicalPhone && user.UserName == canonicalPhone)
-
-            {
-
-                continue;
-
-            }
-
-
-
-            UserCredentials.Apply(user, canonicalPhone, user.Email);
-
-
-
-            var updateResult = await _userManager.UpdateAsync(user);
-
-            if (!updateResult.Succeeded)
-
-            {
-
-                throw new InvalidOperationException(
-
-                    $"Failed to normalize phone number for user '{user.Id}': {string.Join(", ", updateResult.Errors.Select(e => e.Description))}");
-
-            }
-
-        }
-
-    }
-
-
-
-    private async Task<ApplicationUser?> FindDefaultAdminAsync(CancellationToken cancellationToken)
-
-    {
-
-        var userByPhone = await _userManager.Users
-
-            .FirstOrDefaultAsync(
-
-                u => u.PhoneNumber == DefaultAdminPhoneNumber || u.UserName == DefaultAdminPhoneNumber,
-
-                cancellationToken);
-
-
-
-        if (userByPhone is not null)
-
-        {
-
-            return userByPhone;
-
-        }
-
-
-
-        return await _userManager.FindByEmailAsync(DefaultAdminEmail);
-
-    }
-
-
-
-    private async Task EnsureDefaultAdminCredentialsAsync(
-
-        ApplicationUser user,
-
-        CancellationToken cancellationToken)
-
-    {
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-
-
-        var needsUpdate = user.PhoneNumber != DefaultAdminPhoneNumber
-
-            || user.UserName != DefaultAdminPhoneNumber
-
-            || user.Email != DefaultAdminEmail;
-
-
-
-        if (!needsUpdate)
-
-        {
-
+            _logger.LogError(
+                "Admin seed failed while assigning the Admin role: {Errors}",
+                string.Join(", ", addRoleResult.Errors.Select(e => e.Description)));
             return;
-
         }
 
-
-
-        UserCredentials.Apply(user, DefaultAdminPhoneNumber, DefaultAdminEmail);
-
-
-
-        var updateResult = await _userManager.UpdateAsync(user);
-
-        if (!updateResult.Succeeded)
-
-        {
-
-            throw new InvalidOperationException(
-
-                $"Failed to update default admin user credentials: {string.Join(", ", updateResult.Errors.Select(e => e.Description))}");
-
-        }
-
+        _logger.LogInformation("Initial admin user created successfully.");
     }
-
-
 
     private async Task EnsureRoleExistsAsync(CancellationToken cancellationToken)
-
     {
-
         cancellationToken.ThrowIfCancellationRequested();
-
-
 
         if (await _roleManager.RoleExistsAsync(AdminRoleName))
-
         {
-
             return;
-
         }
-
-
 
         var createRoleResult = await _roleManager.CreateAsync(
-
             new ApplicationRole { Id = Guid.NewGuid(), Name = AdminRoleName });
 
-
-
         if (!createRoleResult.Succeeded)
-
         {
-
             throw new InvalidOperationException(
-
                 $"Failed to create role '{AdminRoleName}': {string.Join(", ", createRoleResult.Errors.Select(e => e.Description))}");
-
         }
-
     }
-
-
-
-    private async Task EnsureAdminRoleAssignedAsync(
-
-        ApplicationUser user,
-
-        CancellationToken cancellationToken)
-
-    {
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-
-
-        if (user.Role != UserRole.Admin)
-
-        {
-
-            user.Role = UserRole.Admin;
-
-            var updateResult = await _userManager.UpdateAsync(user);
-
-            if (!updateResult.Succeeded)
-
-            {
-
-                throw new InvalidOperationException(
-
-                    $"Failed to update default admin user role: {string.Join(", ", updateResult.Errors.Select(e => e.Description))}");
-
-            }
-
-        }
-
-
-
-        if (!await _userManager.IsInRoleAsync(user, AdminRoleName))
-
-        {
-
-            var addRoleResult = await _userManager.AddToRoleAsync(user, AdminRoleName);
-
-            if (!addRoleResult.Succeeded)
-
-            {
-
-                throw new InvalidOperationException(
-
-                    $"Failed to assign Admin role to existing admin user: {string.Join(", ", addRoleResult.Errors.Select(e => e.Description))}");
-
-            }
-
-        }
-
-    }
-
 }
-
