@@ -80,7 +80,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: 'deploy/docker-compose.prod.yml,deploy/.env.example,deploy/bootstrap-server.sh'
+          source: 'deploy/docker-compose.prod.yml,deploy/.env.example,deploy/bootstrap-server.sh,deploy/proxy.conf'
           target: ${{ env.APP_DIR }}/
 
       - name: Bootstrap, migrate, and deploy on server

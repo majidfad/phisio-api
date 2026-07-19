@@ -116,6 +116,9 @@ fi
 if [[ -f "${SCRIPT_DIR}/.env.example" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; then
   cp -f "${SCRIPT_DIR}/.env.example" "${APP_DIR}/.env.example"
 fi
+if [[ -f "${SCRIPT_DIR}/proxy.conf" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; then
+  cp -f "${SCRIPT_DIR}/proxy.conf" "${APP_DIR}/proxy.conf"
+fi
 
 if [[ -f "${APP_DIR}/deploy/docker-compose.prod.yml" ]]; then
   mv -f "${APP_DIR}/deploy/docker-compose.prod.yml" "${APP_DIR}/docker-compose.prod.yml"
@@ -127,7 +130,18 @@ if [[ -f "${APP_DIR}/deploy/bootstrap-server.sh" ]]; then
   mv -f "${APP_DIR}/deploy/bootstrap-server.sh" "${APP_DIR}/bootstrap-server.sh"
   chmod +x "${APP_DIR}/bootstrap-server.sh"
 fi
+if [[ -f "${APP_DIR}/deploy/proxy.conf" ]]; then
+  mv -f "${APP_DIR}/deploy/proxy.conf" "${APP_DIR}/proxy.conf"
+fi
 rmdir "${APP_DIR}/deploy" 2>/dev/null || true
+
+# Cloudflare Origin Certificate lives here (origin.pem + origin.key), mounted
+# read-only into the proxy container. Placed manually once; never in git.
+mkdir -p "${APP_DIR}/certs"
+if [[ ! -f "${APP_DIR}/certs/origin.pem" || ! -f "${APP_DIR}/certs/origin.key" ]]; then
+  echo "==> WARNING: ${APP_DIR}/certs/origin.pem or origin.key missing."
+  echo "    The proxy (443) will not start until the Cloudflare Origin Certificate is installed."
+fi
 
 if [[ ! -f "${APP_DIR}/.env.example" && -f "${OLD_API_DIR}/.env.example" ]]; then
   cp "${OLD_API_DIR}/.env.example" "${APP_DIR}/.env.example"
@@ -191,10 +205,13 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 if command -v ufw >/dev/null 2>&1; then
-  if sudo -n ufw allow 3000/tcp >/dev/null 2>&1; then
-    echo "==> Allowed TCP 3000 via ufw"
+  # Public entrypoints are 80/443 (Cloudflare -> proxy). Port 3000 is now bound to
+  # 127.0.0.1 only, so it no longer needs a firewall rule.
+  if sudo -n ufw allow 80/tcp >/dev/null 2>&1 && sudo -n ufw allow 443/tcp >/dev/null 2>&1; then
+    echo "==> Allowed TCP 80 and 443 via ufw"
+    sudo -n ufw delete allow 3000/tcp >/dev/null 2>&1 || true
   else
-    echo "==> Skipping ufw (no passwordless sudo) — open port 3000 manually if needed"
+    echo "==> Skipping ufw (no passwordless sudo) — open ports 80 and 443 manually if needed"
   fi
 fi
 
