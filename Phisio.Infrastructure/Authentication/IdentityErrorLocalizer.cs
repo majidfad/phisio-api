@@ -12,6 +12,7 @@ internal static class IdentityErrorLocalizer
         ["PasswordRequiresDigit"] = "رمز عبور باید حداقل یک عدد داشته باشد.",
         ["PasswordRequiresLower"] = "رمز عبور باید حداقل یک حرف کوچک انگلیسی داشته باشد.",
         ["PasswordRequiresUpper"] = "رمز عبور باید حداقل یک حرف بزرگ انگلیسی داشته باشد.",
+        ["PasswordMismatch"] = "رمز عبور فعلی نادرست است.",
         ["DuplicateUserName"] = AuthErrorMessages.DuplicatePhoneNumber,
         ["DuplicateEmail"] = "این ایمیل قبلاً ثبت شده است.",
     };

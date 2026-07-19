@@ -125,6 +125,45 @@ public class AuthService : IAuthService
             new MeResponse(user.Id, user.PhoneNumber!, user.Email, roles.ToList()));
     }
 
+    public async Task<AuthResult<ChangePasswordResponse>> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (request.NewPassword != request.ConfirmPassword)
+        {
+            return AuthResult<ChangePasswordResponse>.Failure([AuthErrorMessages.PasswordMismatch]);
+        }
+
+        if (request.NewPassword == request.CurrentPassword)
+        {
+            return AuthResult<ChangePasswordResponse>.Failure(
+                [AuthErrorMessages.NewPasswordSameAsCurrent]);
+        }
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+        {
+            return AuthResult<ChangePasswordResponse>.Failure(["User not found."]);
+        }
+
+        var changeResult = await _userManager.ChangePasswordAsync(
+            user,
+            request.CurrentPassword,
+            request.NewPassword);
+
+        if (!changeResult.Succeeded)
+        {
+            return AuthResult<ChangePasswordResponse>.Failure(
+                IdentityErrorLocalizer.Localize(changeResult.Errors));
+        }
+
+        return AuthResult<ChangePasswordResponse>.Success(
+            new ChangePasswordResponse(AuthMessages.PasswordChanged));
+    }
+
     private async Task<AuthResult<RegisterResponse>> RegisterPatientCoreAsync(
         string name,
         string phoneNumber,

@@ -8,5 +8,7 @@ public static class AuthErrorMessages
 
     public const string InvalidRegistrationRole = "ثبت‌نام با نقش انتخاب‌شده مجاز نیست.";
 
+    public const string NewPasswordSameAsCurrent = "رمز عبور جدید نباید با رمز عبور فعلی یکسان باشد.";
+
     public const string AccountNotApproved = "Your account has not been approved yet.";
 }

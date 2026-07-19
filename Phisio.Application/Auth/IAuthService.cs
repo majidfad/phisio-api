@@ -19,4 +19,9 @@ public interface IAuthService
     Task<AuthResult<MeResponse>> GetCurrentUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<AuthResult<ChangePasswordResponse>> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken = default);
 }

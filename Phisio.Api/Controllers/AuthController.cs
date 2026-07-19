@@ -103,4 +103,29 @@ public class AuthController : ControllerBase
 
         return Ok(result.Value);
     }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    [ProducesResponseType(typeof(ChangePasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new { errors = new[] { "Invalid authentication token." } });
+        }
+
+        var result = await _authService.ChangePasswordAsync(userId, request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
 }
