@@ -123,10 +123,40 @@ public class AuthServiceLoginTests
     }
 
     [Fact]
-    public async Task LoginAsync_WhenUserIsDisabled_ReturnsFailure()
+    public async Task LoginAsync_WhenDoctorIsDisabled_ReturnsNotApprovedFailure()
     {
         // Arrange
         var user = ApplicationUserBuilder.Doctor();
+        user.IsEnabled = false;
+        var request = new LoginRequest
+        {
+            PhoneNumber = user.PhoneNumber!,
+            Password = "SecurePass1!"
+        };
+
+        var userManager = IdentityMockFactory.CreateUserManager([user]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.LoginAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(AuthErrorMessages.AccountNotApproved);
+
+        userManager.Verify(
+            manager => manager.CheckPasswordAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenPatientIsDisabled_ReturnsDisabledFailure()
+    {
+        // Arrange
+        var user = ApplicationUserBuilder.Patient();
         user.IsEnabled = false;
         var request = new LoginRequest
         {

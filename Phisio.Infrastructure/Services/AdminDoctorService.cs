@@ -266,6 +266,50 @@ public class AdminDoctorService : IAdminDoctorService
         return AuthResult<bool>.Success(true);
     }
 
+    public async Task<AuthResult<bool>> DeactivateAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctor = await _userManager.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(
+                user => user.Id == doctorId && user.Role == UserRole.Doctor,
+                cancellationToken);
+
+        if (doctor is null)
+        {
+            return AuthResult<bool>.Failure(["Doctor not found."]);
+        }
+
+        if (!doctor.IsEnabled)
+        {
+            return AuthResult<bool>.Failure(["Doctor is already inactive."]);
+        }
+
+        var profile = await _dbContext.DoctorProfiles
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(item => item.DoctorId == doctorId, cancellationToken);
+
+        doctor.IsEnabled = false;
+
+        if (profile is not null)
+        {
+            profile.IsEnabled = false;
+        }
+
+        var updateResult = await _userManager.UpdateAsync(doctor);
+
+        if (!updateResult.Succeeded)
+        {
+            return AuthResult<bool>.Failure(
+                updateResult.Errors.Select(error => error.Description));
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AuthResult<bool>.Success(true);
+    }
+
     private async Task<ApplicationUser?> FindDoctorAsync(
         Guid doctorId,
         CancellationToken cancellationToken)

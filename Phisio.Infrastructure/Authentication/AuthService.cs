@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Auth;
 using Phisio.Application.Common;
+using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
 
@@ -32,11 +33,16 @@ public class AuthService : IAuthService
             return AuthResult<RegisterResponse>.Failure([AuthErrorMessages.PasswordMismatch]);
         }
 
-        return await RegisterPatientCoreAsync(
-            request.Name,
-            request.PhoneNumber,
-            request.Password,
-            cancellationToken);
+        return request.Role switch
+        {
+            UserRole.Patient => await RegisterPatientCoreAsync(
+                request.Name,
+                request.PhoneNumber,
+                request.Password,
+                cancellationToken),
+            UserRole.Doctor => await RegisterDoctorCoreAsync(request, cancellationToken),
+            _ => AuthResult<RegisterResponse>.Failure([AuthErrorMessages.InvalidRegistrationRole]),
+        };
     }
 
     public async Task<AuthResult<RegisterPatientResponse>> RegisterPatientAsync(
@@ -71,7 +77,9 @@ public class AuthService : IAuthService
 
         if (!user.IsEnabled)
         {
-            return AuthResult<AuthResponse>.Failure(["This account has been disabled."]);
+            return user.Role == UserRole.Doctor
+                ? AuthResult<AuthResponse>.Failure([AuthErrorMessages.AccountNotApproved])
+                : AuthResult<AuthResponse>.Failure(["This account has been disabled."]);
         }
 
         var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
@@ -162,7 +170,76 @@ public class AuthService : IAuthService
         }
 
         return AuthResult<RegisterResponse>.Success(
-            new RegisterResponse(user.Id, user.PhoneNumber!, user.Name, user.Role));
+            new RegisterResponse(
+                user.Id,
+                user.PhoneNumber!,
+                user.Name,
+                user.Role,
+                RegisterMessages.PatientRegistered));
+    }
+
+    private async Task<AuthResult<RegisterResponse>> RegisterDoctorCoreAsync(
+        RegisterRequest request,
+        CancellationToken cancellationToken)
+    {
+        await EnsureRoleExistsAsync(nameof(UserRole.Doctor), cancellationToken);
+
+        var validationError = await ValidateUniquePhoneAsync(
+            request.PhoneNumber,
+            excludeUserId: null,
+            cancellationToken);
+
+        if (validationError is not null)
+        {
+            return AuthResult<RegisterResponse>.Failure([validationError]);
+        }
+
+        // Doctors stay disabled until an administrator approves them.
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Name = request.Name,
+            Role = UserRole.Doctor,
+            IsEnabled = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        UserCredentials.Apply(user, request.PhoneNumber, email: null);
+
+        // Persisted together with the user by the Identity EF store.
+        user.DoctorProfile = new DoctorProfile
+        {
+            DoctorProfileId = Guid.NewGuid(),
+            DoctorId = user.Id,
+            Specialty = request.Specialty?.Trim() ?? string.Empty,
+            MedicalLicenseNumber = request.MedicalLicenseNumber?.Trim() ?? string.Empty,
+            ClinicAddress = string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            IsEnabled = false
+        };
+
+        var createResult = await _userManager.CreateAsync(user, request.Password);
+        if (!createResult.Succeeded)
+        {
+            return AuthResult<RegisterResponse>.Failure(
+                IdentityErrorLocalizer.Localize(createResult.Errors));
+        }
+
+        var addRoleResult = await _userManager.AddToRoleAsync(user, nameof(UserRole.Doctor));
+        if (!addRoleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(user);
+            return AuthResult<RegisterResponse>.Failure(
+                IdentityErrorLocalizer.Localize(addRoleResult.Errors));
+        }
+
+        return AuthResult<RegisterResponse>.Success(
+            new RegisterResponse(
+                user.Id,
+                user.PhoneNumber!,
+                user.Name,
+                user.Role,
+                RegisterMessages.DoctorRegistered));
     }
 
     private async Task<ApplicationUser?> FindUserByPhoneAsync(

@@ -6,4 +6,5 @@ public sealed record RegisterResponse(
     Guid UserId,
     string PhoneNumber,
     string Name,
-    UserRole Role);
+    UserRole Role,
+    string Message);

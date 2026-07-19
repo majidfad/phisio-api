@@ -26,7 +26,8 @@ public class AuthControllerRegisterTests
             Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
             "+989121234567",
             request.Name,
-            UserRole.Patient);
+            UserRole.Patient,
+            RegisterMessages.PatientRegistered);
 
         var authService = new Mock<IAuthService>();
         authService.Setup(service => service.RegisterAsync(request, It.IsAny<CancellationToken>()))

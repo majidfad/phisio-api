@@ -171,6 +171,133 @@ public class AuthServiceRegisterTests
     }
 
     [Fact]
+    public async Task RegisterAsync_WhenRequestIsValid_ReturnsPatientMessage()
+    {
+        // Arrange
+        var request = RegisterRequestBuilder.Valid();
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Patient)))
+            .ReturnsAsync(true);
+        userManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), request.Password))
+            .ReturnsAsync(IdentityResult.Success);
+        userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Patient)))
+            .ReturnsAsync(IdentityResult.Success);
+
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.RegisterAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Message.Should().Be(RegisterMessages.PatientRegistered);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WhenRoleIsDoctor_CreatesDisabledDoctorWithProfile()
+    {
+        // Arrange
+        var request = RegisterRequestBuilder.ValidDoctor();
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+
+        ApplicationUser? createdUser = null;
+        userManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), request.Password))
+            .Callback<ApplicationUser, string>((user, _) => createdUser = user)
+            .ReturnsAsync(IdentityResult.Success);
+
+        userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Doctor)))
+            .ReturnsAsync(IdentityResult.Success);
+
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.RegisterAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Role.Should().Be(UserRole.Doctor);
+        result.Value.Message.Should().Be(RegisterMessages.DoctorRegistered);
+
+        createdUser.Should().NotBeNull();
+        createdUser!.Role.Should().Be(UserRole.Doctor);
+        createdUser.IsEnabled.Should().BeFalse();
+        createdUser.UserName.Should().Be(UserCredentials.NormalizePhone(request.PhoneNumber));
+
+        createdUser.DoctorProfile.Should().NotBeNull();
+        createdUser.DoctorProfile!.DoctorId.Should().Be(createdUser.Id);
+        createdUser.DoctorProfile.MedicalLicenseNumber.Should().Be(request.MedicalLicenseNumber);
+        createdUser.DoctorProfile.Specialty.Should().Be(request.Specialty);
+        createdUser.DoctorProfile.IsEnabled.Should().BeFalse();
+
+        userManager.Verify(
+            manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Doctor)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WhenRoleIsAdmin_ReturnsFailure()
+    {
+        // Arrange
+        var request = RegisterRequestBuilder.Valid();
+        request.Role = UserRole.Admin;
+
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.RegisterAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(AuthErrorMessages.InvalidRegistrationRole);
+
+        userManager.Verify(
+            manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WhenDoctorPhoneNumberAlreadyExists_ReturnsFailure()
+    {
+        // Arrange
+        var request = RegisterRequestBuilder.ValidDoctor();
+        var normalizedPhone = UserCredentials.NormalizePhone(request.PhoneNumber);
+        var existingUser = ApplicationUserBuilder.Patient(phoneNumber: normalizedPhone);
+
+        var userManager = IdentityMockFactory.CreateUserManager([existingUser]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.RegisterAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(AuthErrorMessages.DuplicatePhoneNumber);
+
+        userManager.Verify(
+            manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task LoginAsync_AfterSuccessfulRegistration_ReturnsSuccess()
     {
         // Arrange

@@ -304,3 +304,72 @@ public class AdminDoctorServiceActivateTests
         profile.IsEnabled.Should().BeTrue();
     }
 }
+
+public class AdminDoctorServiceDeactivateTests
+{
+    [Fact]
+    public async Task DeactivateAsync_WhenDoctorIsActive_DisablesDoctorAndProfile()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        var profile = DoctorProfileBuilder.Create(doctor.Id);
+
+        var userManager = IdentityMockFactory.CreateUserManager([doctor]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor],
+            doctorProfiles: [profile]).Object;
+
+        userManager.SetupSuccessfulUserUpdate();
+
+        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+
+        // Act
+        var result = await sut.DeactivateAsync(doctor.Id);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        doctor.IsEnabled.Should().BeFalse();
+        profile.IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_WhenDoctorIsAlreadyInactive_ReturnsFailure()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        doctor.IsEnabled = false;
+
+        var userManager = IdentityMockFactory.CreateUserManager([doctor]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor]).Object;
+
+        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+
+        // Act
+        var result = await sut.DeactivateAsync(doctor.Id);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("Doctor is already inactive.");
+        doctor.IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_WhenDoctorDoesNotExist_ReturnsFailure()
+    {
+        // Arrange
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var dbContext = AppDbContextMockFactory.CreateMock().Object;
+
+        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+
+        // Act
+        var result = await sut.DeactivateAsync(Guid.NewGuid());
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("Doctor not found.");
+    }
+}
