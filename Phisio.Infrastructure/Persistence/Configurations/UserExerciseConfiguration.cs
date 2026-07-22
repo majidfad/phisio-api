@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Phisio.Domain.Entities;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
 
 namespace Phisio.Infrastructure.Persistence.Configurations;
@@ -33,6 +34,28 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
             .IsRequired()
             .HasColumnType("date");
 
+        builder.Property(ue => ue.Sets);
+
+        builder.Property(ue => ue.Reps)
+            .HasMaxLength(50);
+
+        builder.Property(ue => ue.HoldSeconds);
+
+        builder.Property(ue => ue.RestSeconds);
+
+        builder.Property(ue => ue.Side)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(ExerciseSide.NotApplicable);
+
+        builder.Property(ue => ue.ClinicianNote)
+            .HasMaxLength(1000);
+
+        builder.Property(ue => ue.PatientCue)
+            .HasMaxLength(500);
+
+        builder.Property(ue => ue.ProgramId);
+
         builder.ConfigureCreatedAt();
         builder.ConfigureSoftDelete();
 
@@ -45,6 +68,8 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
         builder.HasIndex(ue => ue.PatientId);
 
         builder.HasIndex(ue => ue.ExerciseId);
+
+        builder.HasIndex(ue => ue.ProgramId);
 
         builder.HasIndex(ue => new { ue.PatientId, ue.IsActive });
 
@@ -67,5 +92,10 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
             .WithMany(e => e.UserExercises)
             .HasForeignKey(ue => ue.ExerciseId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(ue => ue.Program)
+            .WithMany(p => p.UserExercises)
+            .HasForeignKey(ue => ue.ProgramId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

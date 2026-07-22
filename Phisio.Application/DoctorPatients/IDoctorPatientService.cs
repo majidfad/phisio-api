@@ -42,4 +42,27 @@ public interface IDoctorPatientService
         Guid doctorId,
         Guid patientId,
         CancellationToken cancellationToken = default);
+
+    Task<AuthResult<DoctorPatientOverviewDto>> GetPatientOverviewAsync(
+        Guid doctorId,
+        Guid patientId,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<IReadOnlyList<ExerciseProgramDto>>> GetPatientProgramsAsync(
+        Guid doctorId,
+        Guid patientId,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<CreateExerciseProgramResultDto>> CreateProgramAsync(
+        Guid doctorId,
+        Guid patientId,
+        CreateExerciseProgramRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<CreateExerciseProgramResultDto>> UpdateProgramAsync(
+        Guid doctorId,
+        Guid patientId,
+        Guid programId,
+        UpdateExerciseProgramRequest request,
+        CancellationToken cancellationToken = default);
 }

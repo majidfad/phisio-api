@@ -20,6 +20,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
     public DbSet<UserExercise> UserExercises => Set<UserExercise>();
 
+    public DbSet<ExerciseProgram> ExercisePrograms => Set<ExerciseProgram>();
+
+    public DbSet<ProgramExercise> ProgramExercises => Set<ProgramExercise>();
+
     public DbSet<DoctorProfile> DoctorProfiles => Set<DoctorProfile>();
 
     public DbSet<DoctorPatient> DoctorPatients => Set<DoctorPatient>();

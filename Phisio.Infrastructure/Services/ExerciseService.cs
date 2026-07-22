@@ -3,6 +3,7 @@ using Phisio.Application.Admin.Exercises;
 using Phisio.Application.Common;
 using Phisio.Application.Exercises;
 using Phisio.Domain.Entities;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Persistence;
 
 namespace Phisio.Infrastructure.Services;
@@ -55,7 +56,14 @@ public class ExerciseService : IExerciseService
             ExerciseId = Guid.NewGuid(),
             Title = request.Title,
             Description = request.Description,
+            Instructions = request.Instructions,
             VideoUrl = request.VideoUrl,
+            MediaType = request.MediaType,
+            BodyRegion = request.BodyRegion,
+            Equipment = request.Equipment,
+            Difficulty = request.Difficulty,
+            CreatedByDoctorId = null,
+            IsClinicShared = true,
         };
 
         _dbContext.Exercises.Add(exercise);
@@ -79,7 +87,13 @@ public class ExerciseService : IExerciseService
 
         exercise.Title = request.Title;
         exercise.Description = request.Description;
+        exercise.Instructions = request.Instructions;
         exercise.VideoUrl = request.VideoUrl;
+        exercise.MediaType = request.MediaType;
+        exercise.BodyRegion = request.BodyRegion;
+        exercise.Equipment = request.Equipment;
+        exercise.Difficulty = request.Difficulty;
+        exercise.IsClinicShared = true;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -134,12 +148,19 @@ public class ExerciseService : IExerciseService
         return AuthResult<bool>.Success(true);
     }
 
-    private static ExerciseDto MapToDto(Exercise exercise) =>
+    internal static ExerciseDto MapToDto(Exercise exercise) =>
         new(
             exercise.ExerciseId,
             exercise.Title,
             exercise.Description,
+            exercise.Instructions,
             exercise.VideoUrl,
+            exercise.MediaType,
+            exercise.BodyRegion,
+            exercise.Equipment,
+            exercise.Difficulty,
+            exercise.CreatedByDoctorId,
+            exercise.IsClinicShared,
             exercise.CreatedAt,
             exercise.IsEnabled);
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Phisio.Application.Common;
 using Phisio.Application.Exercises;
+using Phisio.Domain.Enums;
 
 namespace Phisio.Tests.Api.Controllers;
 
@@ -19,8 +20,15 @@ public class ExercisesControllerGetExercisesTests
                 Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
                 "Hamstring Stretch",
                 "Stretch the hamstring muscles.",
+                "",
                 "https://example.com/videos/hamstring-stretch",
-                new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
+                ExerciseMediaType.UploadedVideo,
+                ExerciseBodyRegion.Other,
+                ExerciseEquipment.None,
+                ExerciseDifficulty.Moderate,
+                CreatedByDoctorId: null,
+                IsClinicShared: true,
+                CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
         };
 
         var exerciseService = new Mock<IExerciseService>();
@@ -50,8 +58,15 @@ public class ExercisesControllerGetExerciseTests
             exerciseId,
             "Hamstring Stretch",
             "Stretch the hamstring muscles.",
+            "",
             "https://example.com/videos/hamstring-stretch",
-            new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            ExerciseMediaType.UploadedVideo,
+            ExerciseBodyRegion.Other,
+            ExerciseEquipment.None,
+            ExerciseDifficulty.Moderate,
+            CreatedByDoctorId: null,
+            IsClinicShared: true,
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.GetByIdAsync(exerciseId, It.IsAny<CancellationToken>()))

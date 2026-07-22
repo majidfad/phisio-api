@@ -5,6 +5,7 @@ using Moq;
 using Phisio.Application.Common;
 using Phisio.Application.PatientExercises;
 using Phisio.Api.Controllers.Patient;
+using Phisio.Domain.Enums;
 using System.Security.Claims;
 
 namespace Phisio.Tests.Api.Controllers.Patient;
@@ -26,9 +27,17 @@ public class PatientExercisesControllerTests
                     exerciseId,
                     "کشش گردن",
                     "/uploads/exercises/neck.mp4",
+                    ExerciseMediaType.UploadedVideo,
+                    "",
                     DateTime.UtcNow,
                     DateOnly.FromDateTime(DateTime.UtcNow),
-                    true)
+                    true,
+                    Sets: 3,
+                    Reps: "10",
+                    HoldSeconds: null,
+                    RestSeconds: null,
+                    Side: ExerciseSide.NotApplicable,
+                    PatientCue: null)
             ]);
 
         var patientExerciseService = new Mock<IPatientExerciseService>();
@@ -141,8 +150,16 @@ public class PatientExercisesControllerTests
                         exerciseId,
                         "کشش گردن",
                         "/uploads/exercises/neck.mp4",
+                        ExerciseMediaType.UploadedVideo,
+                        "",
                         today,
-                        false),
+                        false,
+                        Sets: 3,
+                        Reps: "10",
+                        HoldSeconds: null,
+                        RestSeconds: null,
+                        Side: ExerciseSide.NotApplicable,
+                        PatientCue: null),
                 ]),
         ]);
 

@@ -1,3 +1,5 @@
+using Phisio.Domain.Enums;
+
 namespace Phisio.Application.DoctorPatients;
 
 public sealed record DoctorPatientExerciseDto(
@@ -5,5 +7,13 @@ public sealed record DoctorPatientExerciseDto(
     Guid ExerciseId,
     string ExerciseName,
     string? VideoUrl,
+    ExerciseMediaType MediaType,
     DateTime AssignedAt,
-    DateOnly ScheduledDate);
+    DateOnly ScheduledDate,
+    int? Sets,
+    string? Reps,
+    int? HoldSeconds,
+    int? RestSeconds,
+    ExerciseSide Side,
+    string? ClinicianNote,
+    string? PatientCue);

@@ -6,6 +6,7 @@ using Moq;
 using Phisio.Api.Controllers.Doctor;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorPatients;
+using Phisio.Domain.Enums;
 
 namespace Phisio.Tests.Api.Controllers.Doctor;
 
@@ -158,8 +159,16 @@ public class DoctorPatientsControllerGetPatientExercisesTests
                 Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
                 "Hamstring Stretch",
                 "https://example.com/hamstring.mp4",
+                ExerciseMediaType.UploadedVideo,
                 DateTime.UtcNow.AddDays(-2),
-                DateOnly.FromDateTime(DateTime.UtcNow))
+                DateOnly.FromDateTime(DateTime.UtcNow),
+                Sets: 3,
+                Reps: "10",
+                HoldSeconds: null,
+                RestSeconds: null,
+                Side: ExerciseSide.NotApplicable,
+                ClinicianNote: null,
+                PatientCue: null)
         };
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
@@ -211,7 +220,9 @@ public class DoctorPatientsControllerAssignPatientExercisesTests
         var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
         var exerciseId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
         var request = new AssignPatientExercisesRequest(
-            [exerciseId],
+            [new AssignPatientExerciseItem(
+                exerciseId, Sets: 3, Reps: "10", HoldSeconds: null, RestSeconds: null,
+                Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null)],
             [DateOnly.FromDateTime(DateTime.UtcNow)]);
         var response = new AssignPatientExercisesResultDto(1);
 

@@ -16,7 +16,7 @@ public class UpdateExerciseRequestValidatorTests
         {
             Title = "Updated Neck Stretch",
             Description = "Updated description.",
-            VideoUrl = "https://example.com/updated",
+            VideoUrl = "/uploads/exercises/updated.mp4",
         };
 
         // Act

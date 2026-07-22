@@ -16,7 +16,7 @@ public class CreateExerciseDtoValidatorTests
         {
             Title = "Neck Stretch",
             Description = "Gentle neck mobility exercise.",
-            VideoUrl = "https://example.com/neck-stretch",
+            VideoUrl = "/uploads/exercises/neck-stretch.mp4",
         };
 
         // Act

@@ -15,7 +15,7 @@ public class DoctorExerciseServiceGetExercisesTests
         var sut = new DoctorExerciseService(dbContext.Object);
 
         // Act
-        var result = await sut.GetExercisesAsync();
+        var result = await sut.GetExercisesAsync(Guid.NewGuid());
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -35,7 +35,7 @@ public class DoctorExerciseServiceGetExercisesTests
         var sut = new DoctorExerciseService(dbContext.Object);
 
         // Act
-        var result = await sut.GetExercisesAsync();
+        var result = await sut.GetExercisesAsync(Guid.NewGuid());
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -57,7 +57,7 @@ public class DoctorExerciseServiceGetExercisesTests
         var sut = new DoctorExerciseService(dbContext.Object);
 
         // Act
-        var result = await sut.GetExercisesAsync();
+        var result = await sut.GetExercisesAsync(Guid.NewGuid());
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -78,7 +78,7 @@ public class DoctorExerciseServiceGetExercisesTests
         var sut = new DoctorExerciseService(dbContext.Object);
 
         // Act
-        var result = await sut.GetExercisesAsync();
+        var result = await sut.GetExercisesAsync(Guid.NewGuid());
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -98,7 +98,7 @@ public class DoctorExerciseServiceGetExercisesTests
         var sut = new DoctorExerciseService(dbContext.Object);
 
         // Act
-        var result = await sut.GetExercisesAsync();
+        var result = await sut.GetExercisesAsync(Guid.NewGuid());
 
         // Assert
         result.Succeeded.Should().BeTrue();

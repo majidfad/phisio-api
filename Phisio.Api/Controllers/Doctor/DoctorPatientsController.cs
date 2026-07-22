@@ -227,4 +227,131 @@ public class DoctorPatientsController : ControllerBase
 
         return Ok(result.Value);
     }
+
+    [HttpGet("{patientId:guid}/overview")]
+    [ProducesResponseType(typeof(DoctorPatientOverviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPatientOverview(
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.GetPatientOverviewAsync(
+            doctorId.Value,
+            patientId,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpGet("{patientId:guid}/programs")]
+    [ProducesResponseType(typeof(IReadOnlyList<ExerciseProgramDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPatientPrograms(
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.GetPatientProgramsAsync(
+            doctorId.Value,
+            patientId,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("{patientId:guid}/programs")]
+    [ProducesResponseType(typeof(CreateExerciseProgramResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CreatePatientProgram(
+        Guid patientId,
+        [FromBody] CreateExerciseProgramRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.CreateProgramAsync(
+            doctorId.Value,
+            patientId,
+            request,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            var statusCode = result.Errors.Contains(DoctorPatientErrors.PatientNotFound)
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status400BadRequest;
+            return StatusCode(statusCode, new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpPut("{patientId:guid}/programs/{programId:guid}")]
+    [ProducesResponseType(typeof(CreateExerciseProgramResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdatePatientProgram(
+        Guid patientId,
+        Guid programId,
+        [FromBody] UpdateExerciseProgramRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.UpdateProgramAsync(
+            doctorId.Value,
+            patientId,
+            programId,
+            request,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            var statusCode = result.Errors.Contains(DoctorPatientErrors.PatientNotFound)
+                || result.Errors.Contains(DoctorPatientErrors.ProgramNotFound)
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status400BadRequest;
+            return StatusCode(statusCode, new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
 }

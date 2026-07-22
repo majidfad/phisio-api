@@ -8,7 +8,6 @@ public class ExerciseVideoUploadService : IExerciseVideoUploadService
 {
     private const string UploadsFolderName = "uploads";
     private const string ExercisesFolderName = "exercises";
-    private const string PublicUploadsPath = "/uploads";
     private const string PublicExercisesPath = "/uploads/exercises";
 
     private readonly string _exercisesDirectory;
@@ -39,25 +38,29 @@ public class ExerciseVideoUploadService : IExerciseVideoUploadService
 
         if (fileStream is null || !fileStream.CanRead)
         {
-            return AuthResult<UploadExerciseVideoResponse>.Failure(["Video file is required."]);
+            return AuthResult<UploadExerciseVideoResponse>.Failure(["Media file is required."]);
         }
 
         if (fileLength <= 0)
         {
-            return AuthResult<UploadExerciseVideoResponse>.Failure(["Video file is required."]);
+            return AuthResult<UploadExerciseVideoResponse>.Failure(["Media file is required."]);
         }
 
         if (fileLength > ExerciseUploadLimits.MaxFileSizeBytes)
         {
-            return AuthResult<UploadExerciseVideoResponse>.Failure(["Video file must not exceed 50 MB."]);
+            return AuthResult<UploadExerciseVideoResponse>.Failure(["Media file must not exceed 50 MB."]);
         }
 
-        if (!IsMp4File(contentType, originalFileName))
+        var extension = ResolveAllowedExtension(contentType, originalFileName);
+        if (extension is null)
         {
-            return AuthResult<UploadExerciseVideoResponse>.Failure(["Only MP4 video files are allowed."]);
+            return AuthResult<UploadExerciseVideoResponse>.Failure(["Only MP4 video or GIF files are allowed."]);
         }
 
-        var fileName = ExerciseVideoFileNameGenerator.ResolveUniqueFileName(_exercisesDirectory, exerciseName);
+        var fileName = ExerciseVideoFileNameGenerator.ResolveUniqueFileName(
+            _exercisesDirectory,
+            exerciseName,
+            extension);
         var physicalPath = Path.Combine(_exercisesDirectory, fileName);
 
         if (!physicalPath.StartsWith(_exercisesDirectory, StringComparison.OrdinalIgnoreCase))
@@ -83,19 +86,31 @@ public class ExerciseVideoUploadService : IExerciseVideoUploadService
         });
     }
 
-    private static bool IsMp4File(string contentType, string originalFileName)
+    private static string? ResolveAllowedExtension(string contentType, string originalFileName)
     {
-        if (!originalFileName.EndsWith(ExerciseUploadLimits.Mp4Extension, StringComparison.OrdinalIgnoreCase))
+        if (originalFileName.EndsWith(ExerciseUploadLimits.Mp4Extension, StringComparison.OrdinalIgnoreCase)
+            && IsAllowedContentType(contentType, ExerciseUploadLimits.Mp4ContentType))
         {
-            return false;
+            return ExerciseUploadLimits.Mp4Extension;
         }
 
+        if (originalFileName.EndsWith(ExerciseUploadLimits.GifExtension, StringComparison.OrdinalIgnoreCase)
+            && IsAllowedContentType(contentType, ExerciseUploadLimits.GifContentType))
+        {
+            return ExerciseUploadLimits.GifExtension;
+        }
+
+        return null;
+    }
+
+    private static bool IsAllowedContentType(string contentType, string expected)
+    {
         if (string.IsNullOrWhiteSpace(contentType)
             || string.Equals(contentType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        return string.Equals(contentType, ExerciseUploadLimits.Mp4ContentType, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(contentType, expected, StringComparison.OrdinalIgnoreCase);
     }
 }

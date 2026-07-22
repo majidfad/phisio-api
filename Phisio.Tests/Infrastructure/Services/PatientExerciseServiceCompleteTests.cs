@@ -236,7 +236,7 @@ public class PatientExerciseServiceCompleteTests
 
         // Assert
         result.Value!.Exercises.Should().ContainSingle()
-            .Which.IsCompletedToday.Should().BeTrue();
+            .Which.CompletedToday.Should().BeTrue();
     }
 
     [Fact]
@@ -269,6 +269,6 @@ public class PatientExerciseServiceCompleteTests
 
         // Assert
         result.Value!.Exercises.Should().ContainSingle()
-            .Which.IsCompletedToday.Should().BeFalse();
+            .Which.CompletedToday.Should().BeFalse();
     }
 }

@@ -53,9 +53,17 @@ public class PatientExerciseService : IPatientExerciseService
                 exercise.ExerciseId,
                 exercise.Title,
                 exercise.VideoUrl,
+                exercise.MediaType,
+                exercise.Instructions,
                 ue.AssignedAt,
                 ue.ScheduledDate,
-                completion != null))
+                completion != null,
+                ue.Sets,
+                ue.Reps,
+                ue.HoldSeconds,
+                ue.RestSeconds,
+                ue.Side,
+                ue.PatientCue))
             .ToListAsync(cancellationToken);
 
         if (doctorName is null && exercises.Count > 0)
@@ -109,8 +117,16 @@ public class PatientExerciseService : IPatientExerciseService
                     exercise.ExerciseId,
                     exercise.Title,
                     exercise.VideoUrl,
+                    exercise.MediaType,
+                    exercise.Instructions,
                     ue.ScheduledDate,
-                    completion != null),
+                    completion != null,
+                    ue.Sets,
+                    ue.Reps,
+                    ue.HoldSeconds,
+                    ue.RestSeconds,
+                    ue.Side,
+                    ue.PatientCue),
             })
             .ToListAsync(cancellationToken);
 

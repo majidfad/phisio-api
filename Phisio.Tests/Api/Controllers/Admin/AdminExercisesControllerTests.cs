@@ -5,6 +5,7 @@ using Moq;
 using Phisio.Application.Admin.Exercises;
 using Phisio.Application.Common;
 using Phisio.Application.Exercises;
+using Phisio.Domain.Enums;
 
 namespace Phisio.Tests.Api.Controllers.Admin;
 
@@ -20,8 +21,15 @@ public class AdminExercisesControllerGetExercisesTests
                 Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
                 "Hamstring Stretch",
                 "Stretch the hamstring muscles.",
+                "",
                 "https://example.com/videos/hamstring-stretch",
-                new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
+                ExerciseMediaType.UploadedVideo,
+                ExerciseBodyRegion.Other,
+                ExerciseEquipment.None,
+                ExerciseDifficulty.Moderate,
+                CreatedByDoctorId: null,
+                IsClinicShared: true,
+                CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
         };
 
         var exerciseService = new Mock<IExerciseService>();
@@ -51,8 +59,15 @@ public class AdminExercisesControllerGetExerciseTests
             exerciseId,
             "Hamstring Stretch",
             "Stretch the hamstring muscles.",
+            "",
             "https://example.com/videos/hamstring-stretch",
-            new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            ExerciseMediaType.UploadedVideo,
+            ExerciseBodyRegion.Other,
+            ExerciseEquipment.None,
+            ExerciseDifficulty.Moderate,
+            CreatedByDoctorId: null,
+            IsClinicShared: true,
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.GetByIdAsync(exerciseId, It.IsAny<CancellationToken>()))
@@ -107,8 +122,15 @@ public class AdminExercisesControllerCreateExerciseTests
             Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
             request.Title,
             request.Description,
+            request.Instructions,
             request.VideoUrl,
-            new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            request.MediaType,
+            request.BodyRegion,
+            request.Equipment,
+            request.Difficulty,
+            CreatedByDoctorId: null,
+            request.IsClinicShared,
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.CreateAsync(request, It.IsAny<CancellationToken>()))
@@ -169,8 +191,15 @@ public class AdminExercisesControllerUpdateExerciseTests
             exerciseId,
             request.Title,
             request.Description,
+            request.Instructions,
             request.VideoUrl,
-            new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            request.MediaType,
+            request.BodyRegion,
+            request.Equipment,
+            request.Difficulty,
+            CreatedByDoctorId: null,
+            request.IsClinicShared,
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.UpdateAsync(exerciseId, request, It.IsAny<CancellationToken>()))

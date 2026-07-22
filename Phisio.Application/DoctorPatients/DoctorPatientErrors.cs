@@ -15,4 +15,6 @@ public static class DoctorPatientErrors
     public const string NoDatesSelected = "حداقل یک تاریخ باید انتخاب شود";
     public const string NoValidExercises = "تمرین معتبری یافت نشد";
     public const string DuplicateAssignment = "برخی از تمرین‌ها برای تاریخ‌های انتخاب‌شده قبلاً ثبت شده‌اند";
+    public const string ProgramNotFound = "برنامه تمرینی یافت نشد";
+    public const string NoScheduleDates = "با قوانین انتخاب‌شده هیچ تاریخی تولید نشد";
 }

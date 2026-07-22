@@ -1,3 +1,5 @@
+using Phisio.Domain.Enums;
+
 namespace Phisio.Application.Admin.Exercises;
 
 public sealed class CreateExerciseDto
@@ -6,5 +8,17 @@ public sealed class CreateExerciseDto
 
     public string Description { get; set; } = string.Empty;
 
+    public string Instructions { get; set; } = string.Empty;
+
     public string? VideoUrl { get; set; }
+
+    public ExerciseMediaType MediaType { get; set; } = ExerciseMediaType.UploadedVideo;
+
+    public ExerciseBodyRegion BodyRegion { get; set; } = ExerciseBodyRegion.Other;
+
+    public ExerciseEquipment Equipment { get; set; } = ExerciseEquipment.None;
+
+    public ExerciseDifficulty Difficulty { get; set; } = ExerciseDifficulty.Moderate;
+
+    public bool IsClinicShared { get; set; } = true;
 }

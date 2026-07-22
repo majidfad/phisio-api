@@ -6,5 +6,9 @@ public static class ExerciseUploadLimits
 
     public const string Mp4ContentType = "video/mp4";
 
+    public const string GifContentType = "image/gif";
+
     public const string Mp4Extension = ".mp4";
+
+    public const string GifExtension = ".gif";
 }

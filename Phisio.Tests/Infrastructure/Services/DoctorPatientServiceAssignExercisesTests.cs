@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Phisio.Application.DoctorPatients;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Services;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
@@ -11,6 +12,9 @@ public class DoctorPatientServiceAssignExercisesTests
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
     private static readonly DateOnly Tomorrow = Today.AddDays(1);
     private static readonly DateOnly DayAfterTomorrow = Today.AddDays(2);
+    private static AssignPatientExerciseItem Item(Guid exerciseId) =>
+        new(exerciseId, Sets: 3, Reps: "10", HoldSeconds: null, RestSeconds: null,
+            Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null);
 
     [Fact]
     public async Task AssignExercisesAsync_WhenNoExercisesSelected_ReturnsFailure()
@@ -52,7 +56,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([exercise.ExerciseId], []));
+            new AssignPatientExercisesRequest([Item(exercise.ExerciseId)], []));
 
         // Assert
         result.Succeeded.Should().BeFalse();
@@ -76,7 +80,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([exercise.ExerciseId], [Today]));
+            new AssignPatientExercisesRequest([Item(exercise.ExerciseId)], [Today]));
 
         // Assert
         result.Succeeded.Should().BeFalse();
@@ -103,7 +107,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([stretch.ExerciseId], [Today]));
+            new AssignPatientExercisesRequest([Item(stretch.ExerciseId)], [Today]));
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -133,7 +137,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([stretch.ExerciseId, squat.ExerciseId], dates));
+            new AssignPatientExercisesRequest([Item(stretch.ExerciseId), Item(squat.ExerciseId)], dates));
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -172,7 +176,7 @@ public class DoctorPatientServiceAssignExercisesTests
             doctor.Id,
             patient.Id,
             new AssignPatientExercisesRequest(
-                [existingExercise.ExerciseId, newExercise.ExerciseId],
+                [Item(existingExercise.ExerciseId), Item(newExercise.ExerciseId)],
                 [Today]));
 
         // Assert
@@ -209,7 +213,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([exercise.ExerciseId], [Tomorrow]));
+            new AssignPatientExercisesRequest([Item(exercise.ExerciseId)], [Tomorrow]));
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -243,7 +247,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([exercise.ExerciseId], [Today]));
+            new AssignPatientExercisesRequest([Item(exercise.ExerciseId)], [Today]));
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -274,7 +278,7 @@ public class DoctorPatientServiceAssignExercisesTests
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
-            new AssignPatientExercisesRequest([disabledExercise.ExerciseId], [Today]));
+            new AssignPatientExercisesRequest([Item(disabledExercise.ExerciseId)], [Today]));
 
         // Assert
         result.Succeeded.Should().BeFalse();

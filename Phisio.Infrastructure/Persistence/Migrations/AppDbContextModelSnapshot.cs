@@ -295,20 +295,55 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ExerciseId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("BodyRegion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(9);
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
+
+                    b.Property<Guid?>("CreatedByDoctorId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<int>("Difficulty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
+
+                    b.Property<int>("Equipment")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasDefaultValue("");
+
+                    b.Property<bool>("IsClinicShared")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
+
+                    b.Property<int>("MediaType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -316,12 +351,16 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<string>("VideoUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.HasKey("ExerciseId");
 
+                    b.HasIndex("CreatedByDoctorId");
+
                     b.HasIndex("Title");
+
+                    b.HasIndex("IsClinicShared", "IsEnabled");
 
                     b.ToTable("exercises", (string)null);
                 });
@@ -373,6 +412,114 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                     b.ToTable("exercise_completions", (string)null);
                 });
 
+            modelBuilder.Entity("Phisio.Domain.Entities.ExerciseProgram", b =>
+                {
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CadenceType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
+
+                    b.Property<int>("DaysOfWeekMask")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("DoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("IntervalDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("ProgramId");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("DoctorId", "PatientId");
+
+                    b.ToTable("exercise_programs", (string)null);
+                });
+
+            modelBuilder.Entity("Phisio.Domain.Entities.ProgramExercise", b =>
+                {
+                    b.Property<Guid>("ProgramExerciseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClinicianNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("HoldSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("PatientCue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reps")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("RestSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Sets")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Side")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("ProgramExerciseId");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("ProgramId", "ExerciseId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_program_exercises_program_exercise_enabled")
+                        .HasFilter("\"IsEnabled\" = true");
+
+                    b.ToTable("program_exercises", (string)null);
+                });
+
             modelBuilder.Entity("Phisio.Domain.Entities.UserExercise", b =>
                 {
                     b.Property<Guid>("UserExerciseId")
@@ -380,6 +527,10 @@ namespace Phisio.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("AssignedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClinicianNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -392,6 +543,9 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ExerciseId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("HoldSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -402,11 +556,33 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("PatientCue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reps")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("RestSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly>("ScheduledDate")
                         .HasColumnType("date");
+
+                    b.Property<int?>("Sets")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Side")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.HasKey("UserExerciseId");
 
@@ -415,6 +591,8 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                     b.HasIndex("ExerciseId");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("ProgramId");
 
                     b.HasIndex("PatientId", "IsActive");
 
@@ -633,6 +811,14 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Phisio.Domain.Entities.Exercise", b =>
+                {
+                    b.HasOne("Phisio.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByDoctorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("Phisio.Domain.Entities.ExerciseCompletion", b =>
                 {
                     b.HasOne("Phisio.Domain.Entities.UserExercise", null)
@@ -640,6 +826,40 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserExerciseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Phisio.Domain.Entities.ExerciseProgram", b =>
+                {
+                    b.HasOne("Phisio.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Phisio.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Phisio.Domain.Entities.ProgramExercise", b =>
+                {
+                    b.HasOne("Phisio.Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Phisio.Domain.Entities.ExerciseProgram", "Program")
+                        .WithMany("Exercises")
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+
+                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("Phisio.Domain.Entities.UserExercise", b =>
@@ -662,11 +882,25 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Phisio.Domain.Entities.ExerciseProgram", "Program")
+                        .WithMany("UserExercises")
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Exercise");
+
+                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("Phisio.Domain.Entities.Exercise", b =>
                 {
+                    b.Navigation("UserExercises");
+                });
+
+            modelBuilder.Entity("Phisio.Domain.Entities.ExerciseProgram", b =>
+                {
+                    b.Navigation("Exercises");
+
                     b.Navigation("UserExercises");
                 });
 

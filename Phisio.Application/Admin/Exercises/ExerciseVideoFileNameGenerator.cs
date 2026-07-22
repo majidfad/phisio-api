@@ -24,7 +24,7 @@ public static partial class ExerciseVideoFileNameGenerator
         return sanitized.Trim('-');
     }
 
-    public static string ResolveUniqueFileName(string directory, string exerciseName)
+    public static string ResolveUniqueFileName(string directory, string exerciseName, string extension = ExerciseUploadLimits.Mp4Extension)
     {
         var baseName = SanitizeBaseName(exerciseName);
 
@@ -33,21 +33,26 @@ public static partial class ExerciseVideoFileNameGenerator
             baseName = "exercise";
         }
 
-        var candidate = baseName + ExerciseUploadLimits.Mp4Extension;
+        if (!extension.StartsWith('.'))
+        {
+            extension = "." + extension;
+        }
+
+        var candidate = baseName + extension;
 
         if (!File.Exists(Path.Combine(directory, candidate)))
         {
             return candidate;
         }
 
-        candidate = $"{baseName}-{DateTime.UtcNow:yyyyMMddHHmmssfff}{ExerciseUploadLimits.Mp4Extension}";
+        candidate = $"{baseName}-{DateTime.UtcNow:yyyyMMddHHmmssfff}{extension}";
 
         if (!File.Exists(Path.Combine(directory, candidate)))
         {
             return candidate;
         }
 
-        return $"{baseName}-{Guid.NewGuid():N}{ExerciseUploadLimits.Mp4Extension}";
+        return $"{baseName}-{Guid.NewGuid():N}{extension}";
     }
 
     [GeneratedRegex(@"[<>:""/\\|?*\x00-\x1F]")]

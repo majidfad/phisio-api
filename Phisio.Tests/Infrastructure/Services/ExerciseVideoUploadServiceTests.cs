@@ -74,7 +74,7 @@ public class ExerciseVideoUploadServiceTests
             // Assert
             result.Succeeded.Should().BeFalse();
             result.Errors.Should().ContainSingle()
-                .Which.Should().Be("Only MP4 video files are allowed.");
+                .Which.Should().Be("Only MP4 video or GIF files are allowed.");
         }
         finally
         {
