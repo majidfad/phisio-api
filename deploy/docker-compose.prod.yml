@@ -43,7 +43,7 @@ services:
       - phisio_pgdata:/var/lib/postgresql/data
     ports:
       # Localhost only — connect via SSH tunnel (not public).
-      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     networks:
       - phisio_internal
     shm_size: 64mb

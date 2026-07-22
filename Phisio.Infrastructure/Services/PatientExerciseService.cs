@@ -18,6 +18,7 @@ public class PatientExerciseService : IPatientExerciseService
     public async Task<AuthResult<PatientExercisesResponse>> GetExercisesAsync(
         Guid patientId,
         DateOnly? scheduledDate = null,
+        Guid? doctorId = null,
         CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -26,6 +27,7 @@ public class PatientExerciseService : IPatientExerciseService
             from dp in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
             join doctor in _dbContext.Users.AsNoTracking() on dp.DoctorId equals doctor.Id
             where dp.PatientId == patientId
+                && (doctorId == null || dp.DoctorId == doctorId)
             orderby dp.CreatedAt descending
             select doctor.Name)
             .FirstOrDefaultAsync(cancellationToken);
@@ -40,6 +42,7 @@ public class PatientExerciseService : IPatientExerciseService
                 into completions
             from completion in completions.DefaultIfEmpty()
             where dp.PatientId == patientId
+                && (doctorId == null || dp.DoctorId == doctorId)
                 && ue.IsActive
                 && ue.IsEnabled
                 && exercise.IsEnabled
@@ -61,6 +64,7 @@ public class PatientExerciseService : IPatientExerciseService
                 from ue in _dbContext.UserExercises.AsNoTracking()
                 join doctor in _dbContext.Users.AsNoTracking() on ue.DoctorId equals doctor.Id
                 where ue.PatientId == patientId
+                    && (doctorId == null || ue.DoctorId == doctorId)
                     && ue.IsActive
                     && ue.IsEnabled
                 orderby ue.AssignedAt descending
@@ -74,6 +78,7 @@ public class PatientExerciseService : IPatientExerciseService
 
     public async Task<AuthResult<PatientTodayExercisesResponse>> GetTodayExercisesAsync(
         Guid patientId,
+        Guid? doctorId = null,
         CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -89,6 +94,7 @@ public class PatientExerciseService : IPatientExerciseService
                 into completions
             from completion in completions.DefaultIfEmpty()
             where dp.PatientId == patientId
+                && (doctorId == null || dp.DoctorId == doctorId)
                 && ue.IsActive
                 && ue.IsEnabled
                 && exercise.IsEnabled
@@ -96,6 +102,7 @@ public class PatientExerciseService : IPatientExerciseService
             orderby doctor.Name, exercise.Title
             select new
             {
+                DoctorId = doctor.Id,
                 DoctorName = doctor.Name,
                 Item = new PatientTodayExerciseItemDto(
                     ue.UserExerciseId,
@@ -108,10 +115,11 @@ public class PatientExerciseService : IPatientExerciseService
             .ToListAsync(cancellationToken);
 
         var doctorGroups = exerciseRows
-            .GroupBy(row => row.DoctorName)
-            .OrderBy(group => group.Key)
+            .GroupBy(row => new { row.DoctorId, row.DoctorName })
+            .OrderBy(group => group.Key.DoctorName)
             .Select(group => new PatientDoctorExerciseGroupDto(
-                group.Key,
+                group.Key.DoctorId,
+                group.Key.DoctorName,
                 group.Select(row => row.Item).ToList()))
             .ToList();
 

@@ -8,9 +8,18 @@ public interface IDoctorPatientService
         Guid doctorId,
         CancellationToken cancellationToken = default);
 
-    Task<AuthResult<DoctorPatientDto>> AddByPhoneAsync(
+    Task<AuthResult<IReadOnlyList<DoctorPatientRequestDto>>> GetPendingRequestsAsync(
         Guid doctorId,
-        AddDoctorPatientRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<DoctorPatientDto>> ApproveRequestAsync(
+        Guid doctorId,
+        Guid patientId,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<bool>> RejectRequestAsync(
+        Guid doctorId,
+        Guid patientId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<bool>> RemoveAsync(

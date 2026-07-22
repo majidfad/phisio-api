@@ -70,56 +70,51 @@ public class DoctorPatientsControllerGetPatientsTests
     }
 }
 
-public class DoctorPatientsControllerAddPatientTests
+public class DoctorPatientsControllerApproveRequestTests
 {
     [Fact]
-    public async Task AddPatient_WhenPatientIsAdded_ReturnsCreated()
+    public async Task ApproveRequest_WhenSucceeded_ReturnsOk()
     {
-        // Arrange
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
-        var request = new AddDoctorPatientRequest("+15551111111");
-        var created = new DoctorPatientDto(
-            Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7"),
+        var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var approved = new DoctorPatientDto(
+            patientId,
             "Alice Patient",
             "+15551111111",
             DateTime.UtcNow);
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.AddByPhoneAsync(doctorId, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(AuthResult<DoctorPatientDto>.Success(created));
+        doctorPatientService.Setup(service => service.ApproveRequestAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<DoctorPatientDto>.Success(approved));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
             doctorPatientService,
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
-        // Act
-        var result = await controller.AddPatient(request, CancellationToken.None);
+        var result = await controller.ApproveRequest(patientId, CancellationToken.None);
 
-        // Assert
-        var createdResult = result.Should().BeOfType<CreatedAtActionResult>().Subject;
-        createdResult.Value.Should().BeEquivalentTo(created);
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(approved);
     }
 
     [Fact]
-    public async Task AddPatient_WhenPatientNotFound_ReturnsBadRequest()
+    public async Task ApproveRequest_WhenRequestMissing_ReturnsNotFound()
     {
-        // Arrange
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
-        var request = new AddDoctorPatientRequest("+19999999999");
+        var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.AddByPhoneAsync(doctorId, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(AuthResult<DoctorPatientDto>.Failure(["بیمار یافت نشد"]));
+        doctorPatientService.Setup(service => service.ApproveRequestAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<DoctorPatientDto>.Failure([DoctorPatientErrors.RequestNotFound]));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
             doctorPatientService,
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
-        // Act
-        var result = await controller.AddPatient(request, CancellationToken.None);
+        var result = await controller.ApproveRequest(patientId, CancellationToken.None);
 
-        // Assert
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 }
 

@@ -19,6 +19,10 @@ public class DoctorPatientConfiguration : IEntityTypeConfiguration<DoctorPatient
         builder.Property(dp => dp.PatientId)
             .IsRequired();
 
+        builder.Property(dp => dp.Status)
+            .IsRequired()
+            .HasConversion<int>();
+
         builder.ConfigureCreatedAt();
         builder.ConfigureSoftDelete();
 
@@ -28,6 +32,10 @@ public class DoctorPatientConfiguration : IEntityTypeConfiguration<DoctorPatient
         builder.HasIndex(dp => dp.DoctorId);
 
         builder.HasIndex(dp => dp.PatientId);
+
+        builder.HasIndex(dp => new { dp.DoctorId, dp.Status });
+
+        builder.HasIndex(dp => new { dp.PatientId, dp.Status });
 
         builder.HasOne<ApplicationUser>()
             .WithMany()

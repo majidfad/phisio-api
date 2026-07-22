@@ -33,13 +33,13 @@ public class PatientExercisesControllerTests
 
         var patientExerciseService = new Mock<IPatientExerciseService>();
         patientExerciseService
-            .Setup(service => service.GetExercisesAsync(patientId, null, It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetExercisesAsync(patientId, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<PatientExercisesResponse>.Success(response));
 
         var controller = CreateController(patientExerciseService, patientId);
 
         // Act
-        var result = await controller.GetExercises(null, CancellationToken.None);
+        var result = await controller.GetExercises(null, null, CancellationToken.None);
 
         // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -55,13 +55,17 @@ public class PatientExercisesControllerTests
         var controller = CreateController(patientExerciseService, userId: null);
 
         // Act
-        var result = await controller.GetExercises(null, CancellationToken.None);
+        var result = await controller.GetExercises(null, null, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<UnauthorizedResult>();
 
         patientExerciseService.Verify(
-            service => service.GetExercisesAsync(It.IsAny<Guid>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()),
+            service => service.GetExercisesAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<DateOnly?>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -129,6 +133,7 @@ public class PatientExercisesControllerTests
         var response = new PatientTodayExercisesResponse(
         [
             new PatientDoctorExerciseGroupDto(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"),
                 "دکتر رحمانی",
                 [
                     new PatientTodayExerciseItemDto(
@@ -143,13 +148,13 @@ public class PatientExercisesControllerTests
 
         var patientExerciseService = new Mock<IPatientExerciseService>();
         patientExerciseService
-            .Setup(service => service.GetTodayExercisesAsync(patientId, It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetTodayExercisesAsync(patientId, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<PatientTodayExercisesResponse>.Success(response));
 
         var controller = CreateController(patientExerciseService, patientId);
 
         // Act
-        var result = await controller.GetTodayExercises(CancellationToken.None);
+        var result = await controller.GetTodayExercises(null, CancellationToken.None);
 
         // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -165,13 +170,16 @@ public class PatientExercisesControllerTests
         var controller = CreateController(patientExerciseService, userId: null);
 
         // Act
-        var result = await controller.GetTodayExercises(CancellationToken.None);
+        var result = await controller.GetTodayExercises(null, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<UnauthorizedResult>();
 
         patientExerciseService.Verify(
-            service => service.GetTodayExercisesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            service => service.GetTodayExercisesAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

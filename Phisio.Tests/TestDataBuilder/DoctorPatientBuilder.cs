@@ -1,4 +1,5 @@
 using Phisio.Domain.Entities;
+using Phisio.Domain.Enums;
 
 namespace Phisio.Tests.TestDataBuilder;
 
@@ -8,7 +9,8 @@ public static class DoctorPatientBuilder
         Guid doctorId,
         Guid patientId,
         DateTime? createdAt = null,
-        bool isEnabled = true)
+        bool isEnabled = true,
+        DoctorPatientStatus status = DoctorPatientStatus.Approved)
     {
         return new DoctorPatient
         {
@@ -16,6 +18,7 @@ public static class DoctorPatientBuilder
             PatientId = patientId,
             CreatedAt = createdAt ?? DateTime.UtcNow,
             IsEnabled = isEnabled,
+            Status = status,
         };
     }
 }

@@ -11,6 +11,7 @@ internal static class AppDbContextMockFactory
     public static Mock<AppDbContext> CreateMock(
         IEnumerable<ApplicationUser>? users = null,
         IEnumerable<Exercise>? exercises = null,
+        IEnumerable<Article>? articles = null,
         IEnumerable<UserExercise>? userExercises = null,
         IEnumerable<DoctorProfile>? doctorProfiles = null,
         IEnumerable<DoctorPatient>? doctorPatients = null,
@@ -33,6 +34,12 @@ internal static class AppDbContextMockFactory
         if (exercises is not null)
         {
             context.Exercises.AddRange(exercises);
+            context.SaveChanges();
+        }
+
+        if (articles is not null)
+        {
+            context.Articles.AddRange(articles);
             context.SaveChanges();
         }
 

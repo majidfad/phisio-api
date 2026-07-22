@@ -34,13 +34,30 @@ public class DoctorPatientsController : ControllerBase
         return Ok(result.Value);
     }
 
-    [HttpPost("add")]
-    [ProducesResponseType(typeof(DoctorPatientDto), StatusCodes.Status201Created)]
+    [HttpGet("requests")]
+    [ProducesResponseType(typeof(IReadOnlyList<DoctorPatientRequestDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetPendingRequests(CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.GetPendingRequestsAsync(doctorId.Value, cancellationToken);
+        return Ok(result.Value);
+    }
+
+    [HttpPost("{patientId:guid}/approve")]
+    [ProducesResponseType(typeof(DoctorPatientDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> AddPatient(
-        [FromBody] AddDoctorPatientRequest request,
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ApproveRequest(
+        Guid patientId,
         CancellationToken cancellationToken = default)
     {
         var doctorId = User.GetUserId();
@@ -49,14 +66,50 @@ public class DoctorPatientsController : ControllerBase
             return Unauthorized();
         }
 
-        var result = await _doctorPatientService.AddByPhoneAsync(doctorId.Value, request, cancellationToken);
+        var result = await _doctorPatientService.ApproveRequestAsync(
+            doctorId.Value,
+            patientId,
+            cancellationToken);
 
         if (!result.Succeeded)
         {
-            return BadRequest(new { errors = result.Errors });
+            var statusCode = result.Errors.Contains(DoctorPatientErrors.RequestNotFound)
+                || result.Errors.Contains(DoctorPatientErrors.PatientNotFound)
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status400BadRequest;
+
+            return StatusCode(statusCode, new { errors = result.Errors });
         }
 
-        return CreatedAtAction(nameof(GetPatients), result.Value);
+        return Ok(result.Value);
+    }
+
+    [HttpPost("{patientId:guid}/reject")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RejectRequest(
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.RejectRequestAsync(
+            doctorId.Value,
+            patientId,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
+        }
+
+        return NoContent();
     }
 
     [HttpDelete("{patientId:guid}")]

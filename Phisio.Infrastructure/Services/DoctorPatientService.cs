@@ -3,7 +3,6 @@ using Phisio.Application.Common;
 using Phisio.Application.DoctorPatients;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
-using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 
 namespace Phisio.Infrastructure.Services;
@@ -11,8 +10,8 @@ namespace Phisio.Infrastructure.Services;
 public class DoctorPatientService : IDoctorPatientService
 {
     public const string PatientNotFoundError = DoctorPatientErrors.PatientNotFound;
-    public const string DuplicateAssignmentError = "این بیمار قبلاً به لیست شما اضافه شده است";
-    public const string RelationshipNotFoundError = "رابطه بیمار یافت نشد";
+    public const string RelationshipNotFoundError = DoctorPatientErrors.RelationshipNotFound;
+    public const string RequestNotFoundError = DoctorPatientErrors.RequestNotFound;
     public const string NoExercisesSelectedError = DoctorPatientErrors.NoExercisesSelected;
     public const string NoDatesSelectedError = DoctorPatientErrors.NoDatesSelected;
     public const string NoValidExercisesError = DoctorPatientErrors.NoValidExercises;
@@ -26,14 +25,13 @@ public class DoctorPatientService : IDoctorPatientService
     }
 
     public async Task<AuthResult<IReadOnlyList<DoctorPatientDto>>> GetPatientsAsync(
-    Guid doctorId,
-    CancellationToken cancellationToken = default)
+        Guid doctorId,
+        CancellationToken cancellationToken = default)
     {
         var patients = await _dbContext.DoctorPatients
             .AsNoTracking()
-            .Where(dp =>
-                dp.DoctorId == doctorId &&
-                dp.IsEnabled)
+            .WhereActive()
+            .Where(dp => dp.DoctorId == doctorId)
             .Join(
                 _dbContext.Users
                     .AsNoTracking()
@@ -58,57 +56,89 @@ public class DoctorPatientService : IDoctorPatientService
         return AuthResult<IReadOnlyList<DoctorPatientDto>>.Success(patients);
     }
 
-    public async Task<AuthResult<DoctorPatientDto>> AddByPhoneAsync(
+    public async Task<AuthResult<IReadOnlyList<DoctorPatientRequestDto>>> GetPendingRequestsAsync(
         Guid doctorId,
-        AddDoctorPatientRequest request,
         CancellationToken cancellationToken = default)
     {
-        var patient = await FindPatientByPhoneAsync(request.PhoneNumber, cancellationToken);
+        var requests = await _dbContext.DoctorPatients
+            .AsNoTracking()
+            .WherePending()
+            .Where(dp => dp.DoctorId == doctorId)
+            .Join(
+                _dbContext.Users
+                    .AsNoTracking()
+                    .Where(u => u.Role == UserRole.Patient && u.IsEnabled),
+                dp => dp.PatientId,
+                u => u.Id,
+                (dp, u) => new DoctorPatientRequestDto(
+                    u.Id,
+                    u.Name,
+                    u.PhoneNumber ?? string.Empty,
+                    dp.CreatedAt))
+            .OrderByDescending(request => request.RequestedAt)
+            .ToListAsync(cancellationToken);
+
+        return AuthResult<IReadOnlyList<DoctorPatientRequestDto>>.Success(requests);
+    }
+
+    public async Task<AuthResult<DoctorPatientDto>> ApproveRequestAsync(
+        Guid doctorId,
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var relationship = await _dbContext.DoctorPatients
+            .WherePending()
+            .FirstOrDefaultAsync(
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                cancellationToken);
+
+        if (relationship is null)
+        {
+            return AuthResult<DoctorPatientDto>.Failure([RequestNotFoundError]);
+        }
+
+        var patient = await _dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                u => u.Id == patientId && u.Role == UserRole.Patient && u.IsEnabled,
+                cancellationToken);
 
         if (patient is null)
         {
             return AuthResult<DoctorPatientDto>.Failure([PatientNotFoundError]);
         }
 
-        var existingRelationship = await _dbContext.DoctorPatients
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patient.Id,
-                cancellationToken);
-
-        if (existingRelationship is { IsEnabled: true })
-        {
-            return AuthResult<DoctorPatientDto>.Failure([DuplicateAssignmentError]);
-        }
-
-        if (existingRelationship is not null)
-        {
-            existingRelationship.IsEnabled = true;
-            existingRelationship.CreatedAt = DateTime.UtcNow;
-        }
-        else
-        {
-            _dbContext.DoctorPatients.Add(new DoctorPatient
-            {
-                DoctorId = doctorId,
-                PatientId = patient.Id,
-                IsEnabled = true,
-            });
-        }
-
+        relationship.Status = DoctorPatientStatus.Approved;
+        relationship.CreatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        var relationship = await _dbContext.DoctorPatients
-            .AsNoTracking()
-            .FirstAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patient.Id,
-                cancellationToken);
 
         return AuthResult<DoctorPatientDto>.Success(new DoctorPatientDto(
             patient.Id,
             patient.Name,
             patient.PhoneNumber ?? string.Empty,
             relationship.CreatedAt));
+    }
+
+    public async Task<AuthResult<bool>> RejectRequestAsync(
+        Guid doctorId,
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        var relationship = await _dbContext.DoctorPatients
+            .WherePending()
+            .FirstOrDefaultAsync(
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                cancellationToken);
+
+        if (relationship is null)
+        {
+            return AuthResult<bool>.Failure([RequestNotFoundError]);
+        }
+
+        relationship.Status = DoctorPatientStatus.Rejected;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AuthResult<bool>.Success(true);
     }
 
     public async Task<AuthResult<bool>> RemoveAsync(
@@ -420,24 +450,4 @@ public class DoctorPatientService : IDoctorPatientService
         Guid ExerciseId,
         string Title,
         DateTime AssignedAt);
-
-    private async Task<ApplicationUser?> FindPatientByPhoneAsync(
-        string phoneNumber,
-        CancellationToken cancellationToken)
-    {
-        var lookupValues = UserCredentials.GetPhoneLookupValues(phoneNumber);
-
-        if (lookupValues.Count == 0)
-        {
-            return null;
-        }
-
-        return await _dbContext.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                u => u.Role == UserRole.Patient
-                    && (lookupValues.Contains(u.PhoneNumber!)
-                        || lookupValues.Contains(u.UserName!)),
-                cancellationToken);
-    }
 }
