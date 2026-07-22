@@ -14,6 +14,23 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: phisio
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d phisio"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ConnectionStrings__DefaultConnection: >-
+        Host=localhost;Port=5432;Database=phisio;Username=postgres;Password=postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,3 +48,18 @@ jobs:
 
       - name: Test
         run: dotnet test Phisio.sln --configuration Release --no-build --verbosity normal
+
+      - name: Install EF tools
+        run: dotnet tool restore
+
+      - name: Check migration plan is up to date
+        run: >
+          dotnet tool run dotnet-ef migrations has-pending-model-changes
+          --project Phisio.Infrastructure
+          --startup-project Phisio.Api
+
+      - name: Apply migrations against Postgres
+        run: >
+          dotnet tool run dotnet-ef database update
+          --project Phisio.Infrastructure
+          --startup-project Phisio.Api
