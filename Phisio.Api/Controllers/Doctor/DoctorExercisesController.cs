@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Phisio.Application.Admin.Exercises;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorExercises;
+using Phisio.Application.Exercises;
 using Phisio.Api.Extensions;
 
 namespace Phisio.Api.Controllers.Doctor;
@@ -27,9 +28,7 @@ public class DoctorExercisesController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<DoctorExerciseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetExercises(
-        [FromQuery] string? scope = null,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetLibrary(CancellationToken cancellationToken = default)
     {
         var doctorId = User.GetUserId();
         if (doctorId is null)
@@ -37,18 +36,19 @@ public class DoctorExercisesController : ControllerBase
             return Unauthorized();
         }
 
-        var parsedScope = ParseScope(scope);
-        var result = await _exerciseService.GetExercisesAsync(doctorId.Value, parsedScope, cancellationToken);
+        var result = await _exerciseService.GetLibraryAsync(doctorId.Value, cancellationToken);
         return Ok(result.Value);
     }
 
-    private static DoctorExerciseScope ParseScope(string? scope) =>
-        scope?.Trim().ToLowerInvariant() switch
-        {
-            "mine" or "1" => DoctorExerciseScope.Mine,
-            "clinic" or "2" => DoctorExerciseScope.Clinic,
-            _ => DoctorExerciseScope.All,
-        };
+    [HttpGet("catalog")]
+    [ProducesResponseType(typeof(IReadOnlyList<ExerciseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetCatalog(CancellationToken cancellationToken = default)
+    {
+        var result = await _exerciseService.GetCatalogAsync(cancellationToken);
+        return Ok(result.Value);
+    }
 
     [HttpPost]
     [ProducesResponseType(typeof(DoctorExerciseDto), StatusCodes.Status201Created)]

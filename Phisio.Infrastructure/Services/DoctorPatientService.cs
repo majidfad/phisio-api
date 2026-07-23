@@ -252,9 +252,7 @@ public class DoctorPatientService : IDoctorPatientService
             .WhereEnabledStatus(isEnabled: true)
             .Where(exercise => distinctExerciseIds.Contains(exercise.ExerciseId))
             .Where(exercise =>
-                exercise.CreatedByDoctorId == null
-                || exercise.IsClinicShared
-                || exercise.CreatedByDoctorId == doctorId)
+                exercise.CreatedByDoctorId == doctorId)
             .Select(exercise => exercise.ExerciseId)
             .ToListAsync(cancellationToken);
 
@@ -349,8 +347,13 @@ public class DoctorPatientService : IDoctorPatientService
     public async Task<AuthResult<PatientExerciseHistoryResponse>> GetExerciseHistoryAsync(
         Guid doctorId,
         Guid patientId,
+        int page = 1,
+        int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var patientInfo = await (
             from dp in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
             join patient in _dbContext.Users.AsNoTracking()
@@ -371,6 +374,8 @@ public class DoctorPatientService : IDoctorPatientService
             return AuthResult<PatientExerciseHistoryResponse>.Failure([PatientNotFoundError]);
         }
 
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
         var assignments = await (
             from ue in _dbContext.UserExercises.AsNoTracking()
             join exercise in _dbContext.Exercises.AsNoTracking() on ue.ExerciseId equals exercise.ExerciseId
@@ -379,11 +384,19 @@ public class DoctorPatientService : IDoctorPatientService
                 && ue.IsActive
                 && ue.IsEnabled
                 && exercise.IsEnabled
+                && ue.ScheduledDate <= today
             select new AssignmentSnapshot(
                 ue.UserExerciseId,
                 ue.ExerciseId,
                 exercise.Title,
-                ue.AssignedAt))
+                ue.ScheduledDate,
+                ue.Sets,
+                ue.Reps,
+                ue.HoldSeconds,
+                ue.RestSeconds,
+                ue.Side,
+                ue.ClinicianNote,
+                ue.PatientCue))
             .ToListAsync(cancellationToken);
 
         var patientDto = new PatientExerciseHistoryPatientDto(
@@ -397,13 +410,12 @@ public class DoctorPatientService : IDoctorPatientService
                 new PatientExerciseHistoryResponse(
                     patientDto,
                     new PatientExerciseHistorySummaryDto(0, 0, 0, 0),
-                    []));
+                    [],
+                    0,
+                    page,
+                    pageSize));
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var firstAssignmentDate = assignments
-            .Min(assignment => DateOnly.FromDateTime(assignment.AssignedAt));
-        var assignedDays = today.DayNumber - firstAssignmentDate.DayNumber + 1;
         var userExerciseIds = assignments
             .Select(assignment => assignment.UserExerciseId)
             .ToList();
@@ -436,23 +448,44 @@ public class DoctorPatientService : IDoctorPatientService
                 && feedback.IsEnabled)
             .ToDictionaryAsync(feedback => feedback.FeedbackDate, cancellationToken);
 
-        var completedDaysCount = completionsByDate.Count;
-        var missedDaysCount = Math.Max(assignedDays - completedDaysCount, 0);
-        var adherencePercentage = assignedDays == 0
-            ? 0
-            : (int)Math.Round(completedDaysCount * 100.0 / assignedDays, MidpointRounding.AwayFromZero);
+        var scheduledDates = assignments
+            .Select(assignment => assignment.ScheduledDate)
+            .Distinct()
+            .OrderByDescending(date => date)
+            .ToList();
 
-        var dailyHistory = new List<PatientExerciseHistoryDayDto>();
-        for (var date = today; date >= firstAssignmentDate; date = date.AddDays(-1))
+        var completedDaysCount = scheduledDates.Count(date =>
+            (completionsByDate.GetValueOrDefault(date) ?? []).Count > 0);
+        var missedDaysCount = Math.Max(scheduledDates.Count - completedDaysCount, 0);
+        var adherencePercentage = scheduledDates.Count == 0
+            ? 0
+            : (int)Math.Round(
+                completedDaysCount * 100.0 / scheduledDates.Count,
+                MidpointRounding.AwayFromZero);
+
+        var pageDates = scheduledDates
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var dailyHistory = new List<PatientExerciseHistoryDayDto>(pageDates.Count);
+        foreach (var date in pageDates)
         {
             var completedSet = completionsByDate.GetValueOrDefault(date) ?? [];
             var exercisesForDay = assignments
-                .Where(assignment => DateOnly.FromDateTime(assignment.AssignedAt) <= date)
+                .Where(assignment => assignment.ScheduledDate == date)
                 .Select(assignment => new PatientExerciseHistoryExerciseDto(
                     assignment.UserExerciseId,
                     assignment.ExerciseId,
                     assignment.Title,
-                    completedSet.Contains(assignment.UserExerciseId)))
+                    completedSet.Contains(assignment.UserExerciseId),
+                    assignment.Sets,
+                    assignment.Reps,
+                    assignment.HoldSeconds,
+                    assignment.RestSeconds,
+                    assignment.Side,
+                    assignment.ClinicianNote,
+                    assignment.PatientCue))
                 .ToList();
 
             var completedCount = exercisesForDay.Count(exercise => exercise.IsCompleted);
@@ -463,6 +496,7 @@ public class DoctorPatientService : IDoctorPatientService
                 completedCount > 0,
                 exercisesForDay,
                 feedback?.ImprovementScore,
+                feedback?.HardnessScore,
                 feedback?.Comment));
         }
 
@@ -473,7 +507,13 @@ public class DoctorPatientService : IDoctorPatientService
             adherencePercentage);
 
         return AuthResult<PatientExerciseHistoryResponse>.Success(
-            new PatientExerciseHistoryResponse(patientDto, summary, dailyHistory));
+            new PatientExerciseHistoryResponse(
+                patientDto,
+                summary,
+                dailyHistory,
+                scheduledDates.Count,
+                page,
+                pageSize));
     }
 
     public async Task<AuthResult<DoctorPatientOverviewDto>> GetPatientOverviewAsync(
@@ -500,7 +540,7 @@ public class DoctorPatientService : IDoctorPatientService
             return AuthResult<DoctorPatientOverviewDto>.Failure([PatientNotFoundError]);
         }
 
-        var history = await GetExerciseHistoryAsync(doctorId, patientId, cancellationToken);
+        var history = await GetExerciseHistoryAsync(doctorId, patientId, page: 1, pageSize: 1, cancellationToken);
         if (!history.Succeeded || history.Value is null)
         {
             return AuthResult<DoctorPatientOverviewDto>.Failure(history.Errors);
@@ -803,6 +843,252 @@ public class DoctorPatientService : IDoctorPatientService
             new CreateExerciseProgramResultDto(programId, assignedCount));
     }
 
+    public async Task<AuthResult<bool>> DeleteProgramAsync(
+        Guid doctorId,
+        Guid patientId,
+        Guid programId,
+        CancellationToken cancellationToken = default)
+    {
+        var program = await _dbContext.ExercisePrograms
+            .Include(p => p.Exercises)
+            .FirstOrDefaultAsync(
+                p => p.ProgramId == programId
+                    && p.DoctorId == doctorId
+                    && p.PatientId == patientId
+                    && p.IsEnabled,
+                cancellationToken);
+
+        if (program is null)
+        {
+            return AuthResult<bool>.Failure([DoctorPatientErrors.ProgramNotFound]);
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var futureAssignments = await _dbContext.UserExercises
+            .Where(ue =>
+                ue.ProgramId == programId
+                && ue.DoctorId == doctorId
+                && ue.PatientId == patientId
+                && ue.ScheduledDate >= today
+                && ue.IsActive
+                && ue.IsEnabled)
+            .ToListAsync(cancellationToken);
+
+        var futureIds = futureAssignments.Select(ue => ue.UserExerciseId).ToList();
+        var completedIds = futureIds.Count == 0
+            ? []
+            : await _dbContext.ExerciseCompletions
+                .AsNoTracking()
+                .Where(c =>
+                    c.IsEnabled
+                    && c.CompletionDate >= today
+                    && futureIds.Contains(c.UserExerciseId))
+                .Select(c => c.UserExerciseId)
+                .ToListAsync(cancellationToken);
+        var completedSet = completedIds.ToHashSet();
+
+        foreach (var assignment in futureAssignments)
+        {
+            if (completedSet.Contains(assignment.UserExerciseId))
+            {
+                continue;
+            }
+
+            assignment.IsActive = false;
+            assignment.IsEnabled = false;
+        }
+
+        SoftDeleteExtensions.SoftDeleteRange(program.Exercises.Where(e => e.IsEnabled));
+        program.SoftDelete();
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return AuthResult<bool>.Success(true);
+    }
+
+    public async Task<AuthResult<PatientExerciseStatsResponse>> GetExerciseStatsAsync(
+        Guid doctorId,
+        Guid patientId,
+        DateOnly? from = null,
+        DateOnly? to = null,
+        CancellationToken cancellationToken = default)
+    {
+        var hasActiveRelationship = await _dbContext.DoctorPatients
+            .AsNoTracking()
+            .WhereActive()
+            .AnyAsync(
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                cancellationToken);
+
+        if (!hasActiveRelationship)
+        {
+            return AuthResult<PatientExerciseStatsResponse>.Failure([PatientNotFoundError]);
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var rangeTo = to ?? today;
+        var rangeFrom = from ?? rangeTo.AddDays(-29);
+        if (rangeFrom > rangeTo)
+        {
+            (rangeFrom, rangeTo) = (rangeTo, rangeFrom);
+        }
+
+        var assignments = await (
+            from ue in _dbContext.UserExercises.AsNoTracking()
+            join exercise in _dbContext.Exercises.AsNoTracking() on ue.ExerciseId equals exercise.ExerciseId
+            where ue.DoctorId == doctorId
+                && ue.PatientId == patientId
+                && ue.IsActive
+                && ue.IsEnabled
+                && exercise.IsEnabled
+                && ue.ScheduledDate >= rangeFrom
+                && ue.ScheduledDate <= rangeTo
+            select new
+            {
+                ue.UserExerciseId,
+                ue.ExerciseId,
+                Title = exercise.Title,
+                ue.ScheduledDate,
+            })
+            .ToListAsync(cancellationToken);
+
+        var userExerciseIds = assignments.Select(a => a.UserExerciseId).ToList();
+        var completedIds = userExerciseIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _dbContext.ExerciseCompletions
+                .AsNoTracking()
+                .Where(c =>
+                    c.IsEnabled
+                    && c.DoctorId == doctorId
+                    && c.PatientId == patientId
+                    && userExerciseIds.Contains(c.UserExerciseId)
+                    && c.CompletionDate >= rangeFrom
+                    && c.CompletionDate <= rangeTo)
+                .Select(c => c.UserExerciseId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+        var feedbackByDate = await _dbContext.DailyPatientFeedbacks
+            .AsNoTracking()
+            .Where(f =>
+                f.PatientId == patientId
+                && f.DoctorId == doctorId
+                && f.IsEnabled
+                && f.FeedbackDate >= rangeFrom
+                && f.FeedbackDate <= rangeTo)
+            .ToDictionaryAsync(f => f.FeedbackDate, cancellationToken);
+
+        var scheduledDates = assignments
+            .Select(a => a.ScheduledDate)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+
+        var daily = new List<PatientExerciseStatsDailyDto>(scheduledDates.Count);
+        foreach (var date in scheduledDates)
+        {
+            var dayAssignments = assignments.Where(a => a.ScheduledDate == date).ToList();
+            var completedCount = dayAssignments.Count(a => completedIds.Contains(a.UserExerciseId));
+            feedbackByDate.TryGetValue(date, out var feedback);
+            daily.Add(new PatientExerciseStatsDailyDto(
+                date,
+                dayAssignments.Count,
+                completedCount,
+                completedCount > 0,
+                feedback?.ImprovementScore,
+                feedback?.HardnessScore));
+        }
+
+        var completedDays = daily.Count(d => d.IsCompleted);
+        var missedDays = Math.Max(daily.Count - completedDays, 0);
+        var assignedExerciseCount = assignments.Count;
+        var completedExerciseCount = assignments.Count(a => completedIds.Contains(a.UserExerciseId));
+        var adherencePercentage = daily.Count == 0
+            ? 0
+            : (int)Math.Round(completedDays * 100.0 / daily.Count, MidpointRounding.AwayFromZero);
+        var exerciseCompletionPercentage = assignedExerciseCount == 0
+            ? 0
+            : (int)Math.Round(
+                completedExerciseCount * 100.0 / assignedExerciseCount,
+                MidpointRounding.AwayFromZero);
+
+        var improvementScores = daily
+            .Where(d => d.ImprovementScore.HasValue)
+            .Select(d => d.ImprovementScore!.Value)
+            .ToList();
+        var hardnessScores = daily
+            .Where(d => d.HardnessScore.HasValue)
+            .Select(d => d.HardnessScore!.Value)
+            .ToList();
+
+        var summary = new PatientExerciseStatsSummaryDto(
+            daily.Count,
+            completedDays,
+            missedDays,
+            adherencePercentage,
+            assignedExerciseCount,
+            completedExerciseCount,
+            exerciseCompletionPercentage,
+            improvementScores.Count == 0 ? null : Math.Round(improvementScores.Average(), 1),
+            hardnessScores.Count == 0 ? null : Math.Round(hardnessScores.Average(), 1),
+            improvementScores.Count);
+
+        var weekly = daily
+            .GroupBy(d => StartOfWeek(d.Date))
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var weekCompleted = g.Count(d => d.IsCompleted);
+                var weekScheduled = g.Count();
+                var weekAdherence = weekScheduled == 0
+                    ? 0
+                    : (int)Math.Round(
+                        weekCompleted * 100.0 / weekScheduled,
+                        MidpointRounding.AwayFromZero);
+                return new PatientExerciseStatsWeeklyDto(
+                    g.Key,
+                    weekScheduled,
+                    weekCompleted,
+                    weekAdherence);
+            })
+            .ToList();
+
+        var exercises = assignments
+            .GroupBy(a => new { a.ExerciseId, a.Title })
+            .Select(g =>
+            {
+                var assigned = g.Count();
+                var completed = g.Count(a => completedIds.Contains(a.UserExerciseId));
+                var pct = assigned == 0
+                    ? 0
+                    : (int)Math.Round(completed * 100.0 / assigned, MidpointRounding.AwayFromZero);
+                return new PatientExerciseStatsExerciseDto(
+                    g.Key.ExerciseId,
+                    g.Key.Title,
+                    assigned,
+                    completed,
+                    pct);
+            })
+            .OrderBy(e => e.CompletionPercentage)
+            .ThenBy(e => e.Title)
+            .ToList();
+
+        return AuthResult<PatientExerciseStatsResponse>.Success(
+            new PatientExerciseStatsResponse(
+                rangeFrom,
+                rangeTo,
+                summary,
+                daily,
+                weekly,
+                exercises));
+    }
+
+    private static DateOnly StartOfWeek(DateOnly date)
+    {
+        var offset = ((int)date.DayOfWeek + 6) % 7; // Monday as week start
+        return date.AddDays(-offset);
+    }
+
     private async Task<List<Guid>> GetValidExerciseIdsAsync(
         Guid doctorId,
         IReadOnlyList<Guid> exerciseIds,
@@ -813,9 +1099,7 @@ public class DoctorPatientService : IDoctorPatientService
             .WhereEnabledStatus(isEnabled: true)
             .Where(exercise => exerciseIds.Contains(exercise.ExerciseId))
             .Where(exercise =>
-                exercise.CreatedByDoctorId == null
-                || exercise.IsClinicShared
-                || exercise.CreatedByDoctorId == doctorId)
+                exercise.CreatedByDoctorId == doctorId)
             .Select(exercise => exercise.ExerciseId)
             .ToListAsync(cancellationToken);
     }
@@ -945,5 +1229,12 @@ public class DoctorPatientService : IDoctorPatientService
         Guid UserExerciseId,
         Guid ExerciseId,
         string Title,
-        DateTime AssignedAt);
+        DateOnly ScheduledDate,
+        int? Sets,
+        string? Reps,
+        int? HoldSeconds,
+        int? RestSeconds,
+        ExerciseSide Side,
+        string? ClinicianNote,
+        string? PatientCue);
 }

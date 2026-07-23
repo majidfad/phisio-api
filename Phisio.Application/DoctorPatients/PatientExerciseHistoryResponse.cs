@@ -1,9 +1,14 @@
+using Phisio.Domain.Enums;
+
 namespace Phisio.Application.DoctorPatients;
 
 public sealed record PatientExerciseHistoryResponse(
     PatientExerciseHistoryPatientDto Patient,
     PatientExerciseHistorySummaryDto Summary,
-    IReadOnlyList<PatientExerciseHistoryDayDto> DailyHistory);
+    IReadOnlyList<PatientExerciseHistoryDayDto> DailyHistory,
+    int TotalDays,
+    int Page,
+    int PageSize);
 
 public sealed record PatientExerciseHistoryPatientDto(
     Guid PatientId,
@@ -22,10 +27,18 @@ public sealed record PatientExerciseHistoryDayDto(
     bool IsCompleted,
     IReadOnlyList<PatientExerciseHistoryExerciseDto> Exercises,
     int? ImprovementScore,
+    int? HardnessScore,
     string? Comment);
 
 public sealed record PatientExerciseHistoryExerciseDto(
     Guid UserExerciseId,
     Guid ExerciseId,
     string Title,
-    bool IsCompleted);
+    bool IsCompleted,
+    int? Sets,
+    string? Reps,
+    int? HoldSeconds,
+    int? RestSeconds,
+    ExerciseSide Side,
+    string? ClinicianNote,
+    string? PatientCue);

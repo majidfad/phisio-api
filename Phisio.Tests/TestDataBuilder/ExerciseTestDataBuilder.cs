@@ -21,7 +21,6 @@ internal static class ExerciseTestDataBuilder
             BodyRegion = ExerciseBodyRegion.Other,
             Equipment = ExerciseEquipment.None,
             Difficulty = ExerciseDifficulty.Moderate,
-            IsClinicShared = true,
         };
 
     public static UpdateExerciseRequest UpdateRequest(
@@ -38,7 +37,6 @@ internal static class ExerciseTestDataBuilder
             BodyRegion = ExerciseBodyRegion.Other,
             Equipment = ExerciseEquipment.None,
             Difficulty = ExerciseDifficulty.Moderate,
-            IsClinicShared = true,
         };
 }
 
@@ -49,7 +47,8 @@ internal static class ExerciseBuilder
         string description = "Gentle neck mobility exercise.",
         string? videoUrl = "/uploads/exercises/neck-stretch.mp4",
         Guid? id = null,
-        DateTime? createdAt = null) =>
+        DateTime? createdAt = null,
+        Guid? createdByDoctorId = null) =>
         new()
         {
             ExerciseId = id ?? Guid.NewGuid(),
@@ -57,6 +56,7 @@ internal static class ExerciseBuilder
             Description = description,
             VideoUrl = videoUrl,
             CreatedAt = createdAt ?? DateTime.UtcNow,
+            CreatedByDoctorId = createdByDoctorId,
         };
 }
 

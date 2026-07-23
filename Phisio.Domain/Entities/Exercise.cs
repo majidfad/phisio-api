@@ -23,10 +23,8 @@ public class Exercise : BaseEntity
 
     public ExerciseDifficulty Difficulty { get; set; } = ExerciseDifficulty.Moderate;
 
-    /// <summary>Null means clinic/admin-owned shared exercise.</summary>
+    /// <summary>Null means admin catalog exercise.</summary>
     public Guid? CreatedByDoctorId { get; set; }
-
-    public bool IsClinicShared { get; set; } = true;
 
     public ICollection<UserExercise> UserExercises { get; set; } = new List<UserExercise>();
 }

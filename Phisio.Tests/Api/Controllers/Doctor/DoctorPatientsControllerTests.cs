@@ -265,14 +265,30 @@ public class DoctorPatientsControllerGetPatientExerciseHistoryTests
                             Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
                             Guid.Parse("b2c3d4e5-f6a7-8901-bcde-f12345678901"),
                             "Neck Stretch",
-                            true),
+                            true,
+                            3,
+                            "10",
+                            5,
+                            30,
+                            Phisio.Domain.Enums.ExerciseSide.Left,
+                            "Watch form",
+                            "Keep spine neutral"),
                     ],
                     4,
+                    3,
                     "امروز درد زانو کمتر بود."),
-            ]);
+            ],
+            TotalDays: 1,
+            Page: 1,
+            PageSize: 10);
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.GetExerciseHistoryAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        doctorPatientService.Setup(service => service.GetExerciseHistoryAsync(
+                doctorId,
+                patientId,
+                1,
+                10,
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<PatientExerciseHistoryResponse>.Success(response));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
@@ -280,7 +296,7 @@ public class DoctorPatientsControllerGetPatientExerciseHistoryTests
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
         // Act
-        var result = await controller.GetPatientExerciseHistory(patientId, CancellationToken.None);
+        var result = await controller.GetPatientExerciseHistory(patientId, 1, 10, CancellationToken.None);
 
         // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -295,7 +311,12 @@ public class DoctorPatientsControllerGetPatientExerciseHistoryTests
         var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.GetExerciseHistoryAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        doctorPatientService.Setup(service => service.GetExerciseHistoryAsync(
+                doctorId,
+                patientId,
+                1,
+                10,
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<PatientExerciseHistoryResponse>.Failure(["بیمار یافت نشد"]));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
@@ -303,9 +324,88 @@ public class DoctorPatientsControllerGetPatientExerciseHistoryTests
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
         // Act
-        var result = await controller.GetPatientExerciseHistory(patientId, CancellationToken.None);
+        var result = await controller.GetPatientExerciseHistory(patientId, 1, 10, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<NotFoundObjectResult>();
     }
 }
+
+public class DoctorPatientsControllerDeleteProgramTests
+{
+    [Fact]
+    public async Task DeletePatientProgram_WhenSucceeded_ReturnsNoContent()
+    {
+        var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var programId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+
+        var doctorPatientService = new Mock<IDoctorPatientService>();
+        doctorPatientService.Setup(s => s.DeleteProgramAsync(
+                doctorId, patientId, programId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<bool>.Success(true));
+
+        var controller = DoctorPatientsControllerTestHelper.CreateController(
+            doctorPatientService,
+            DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
+
+        var result = await controller.DeletePatientProgram(patientId, programId, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task DeletePatientProgram_WhenNotFound_ReturnsNotFound()
+    {
+        var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var programId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+
+        var doctorPatientService = new Mock<IDoctorPatientService>();
+        doctorPatientService.Setup(s => s.DeleteProgramAsync(
+                doctorId, patientId, programId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<bool>.Failure([DoctorPatientErrors.ProgramNotFound]));
+
+        var controller = DoctorPatientsControllerTestHelper.CreateController(
+            doctorPatientService,
+            DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
+
+        var result = await controller.DeletePatientProgram(patientId, programId, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundObjectResult>();
+    }
+}
+
+public class DoctorPatientsControllerExerciseStatsTests
+{
+    [Fact]
+    public async Task GetPatientExerciseStats_WhenSucceeded_ReturnsOk()
+    {
+        var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7));
+        var to = DateOnly.FromDateTime(DateTime.UtcNow);
+        var response = new PatientExerciseStatsResponse(
+            from,
+            to,
+            new PatientExerciseStatsSummaryDto(2, 1, 1, 50, 4, 2, 50, 4.0, 3.0, 1),
+            [],
+            [],
+            []);
+
+        var doctorPatientService = new Mock<IDoctorPatientService>();
+        doctorPatientService.Setup(s => s.GetExerciseStatsAsync(
+                doctorId, patientId, from, to, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<PatientExerciseStatsResponse>.Success(response));
+
+        var controller = DoctorPatientsControllerTestHelper.CreateController(
+            doctorPatientService,
+            DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
+
+        var result = await controller.GetPatientExerciseStats(patientId, from, to, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(response);
+    }
+}
+

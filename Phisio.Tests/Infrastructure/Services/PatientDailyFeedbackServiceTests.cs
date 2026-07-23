@@ -38,6 +38,7 @@ public class PatientDailyFeedbackServiceSubmitTests
         var request = new SubmitDailyFeedbackRequest
         {
             ImprovementScore = 4,
+            HardnessScore = 3,
             Comment = "امروز درد زانو کمتر بود.",
         };
 
@@ -78,6 +79,7 @@ public class PatientDailyFeedbackServiceSubmitTests
         var request = new SubmitDailyFeedbackRequest
         {
             ImprovementScore = 5,
+            HardnessScore = 2,
             Comment = "امروز خیلی بهتر شدم.",
         };
 

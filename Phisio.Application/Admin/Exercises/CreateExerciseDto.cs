@@ -19,6 +19,4 @@ public sealed class CreateExerciseDto
     public ExerciseEquipment Equipment { get; set; } = ExerciseEquipment.None;
 
     public ExerciseDifficulty Difficulty { get; set; } = ExerciseDifficulty.Moderate;
-
-    public bool IsClinicShared { get; set; } = true;
 }

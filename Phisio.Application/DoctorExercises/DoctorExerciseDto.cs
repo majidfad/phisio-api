@@ -2,13 +2,6 @@ using Phisio.Domain.Enums;
 
 namespace Phisio.Application.DoctorExercises;
 
-public enum DoctorExerciseScope
-{
-    All = 0,
-    Mine = 1,
-    Clinic = 2,
-}
-
 public sealed record DoctorExerciseDto(
     Guid ExerciseId,
     string Title,
@@ -20,7 +13,6 @@ public sealed record DoctorExerciseDto(
     ExerciseEquipment Equipment,
     ExerciseDifficulty Difficulty,
     Guid? CreatedByDoctorId,
-    bool IsClinicShared,
     bool IsOwnedByCurrentDoctor,
     DateTime CreatedAt);
 
@@ -41,8 +33,6 @@ public sealed class CreateDoctorExerciseRequest
     public ExerciseEquipment Equipment { get; set; } = ExerciseEquipment.None;
 
     public ExerciseDifficulty Difficulty { get; set; } = ExerciseDifficulty.Moderate;
-
-    public bool IsClinicShared { get; set; }
 }
 
 public sealed class UpdateDoctorExerciseRequest
@@ -62,6 +52,4 @@ public sealed class UpdateDoctorExerciseRequest
     public ExerciseEquipment Equipment { get; set; } = ExerciseEquipment.None;
 
     public ExerciseDifficulty Difficulty { get; set; } = ExerciseDifficulty.Moderate;
-
-    public bool IsClinicShared { get; set; }
 }

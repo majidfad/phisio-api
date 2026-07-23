@@ -28,7 +28,6 @@ public class AdminExercisesControllerGetExercisesTests
                 ExerciseEquipment.None,
                 ExerciseDifficulty.Moderate,
                 CreatedByDoctorId: null,
-                IsClinicShared: true,
                 CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
         };
 
@@ -66,7 +65,6 @@ public class AdminExercisesControllerGetExerciseTests
             ExerciseEquipment.None,
             ExerciseDifficulty.Moderate,
             CreatedByDoctorId: null,
-            IsClinicShared: true,
             CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();
@@ -129,7 +127,6 @@ public class AdminExercisesControllerCreateExerciseTests
             request.Equipment,
             request.Difficulty,
             CreatedByDoctorId: null,
-            request.IsClinicShared,
             CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();
@@ -198,7 +195,6 @@ public class AdminExercisesControllerUpdateExerciseTests
             request.Equipment,
             request.Difficulty,
             CreatedByDoctorId: null,
-            request.IsClinicShared,
             CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();

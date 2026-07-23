@@ -14,5 +14,7 @@ public class DailyPatientFeedback : BaseEntity
 
     public int ImprovementScore { get; set; }
 
+    public int HardnessScore { get; set; }
+
     public string? Comment { get; set; }
 }

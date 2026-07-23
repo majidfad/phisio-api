@@ -31,12 +31,11 @@ internal static class DoctorExercisesControllerTestHelper
     }
 }
 
-public class DoctorExercisesControllerGetExercisesTests
+public class DoctorExercisesControllerGetLibraryTests
 {
     [Fact]
-    public async Task GetExercises_WhenExercisesExist_ReturnsOk()
+    public async Task GetLibrary_WhenExercisesExist_ReturnsOk()
     {
-        // Arrange
         var doctorId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
         var exercises = new List<DoctorExerciseDto>
         {
@@ -51,15 +50,13 @@ public class DoctorExercisesControllerGetExercisesTests
                 ExerciseEquipment.None,
                 ExerciseDifficulty.Moderate,
                 CreatedByDoctorId: doctorId,
-                IsClinicShared: true,
                 IsOwnedByCurrentDoctor: true,
                 CreatedAt: DateTime.UtcNow)
         };
 
         var exerciseService = new Mock<IDoctorExerciseService>();
         var exerciseVideoUploadService = new Mock<IExerciseVideoUploadService>();
-        exerciseService.Setup(service => service.GetExercisesAsync(
-                doctorId, DoctorExerciseScope.All, It.IsAny<CancellationToken>()))
+        exerciseService.Setup(service => service.GetLibraryAsync(doctorId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<IReadOnlyList<DoctorExerciseDto>>.Success(exercises));
 
         var controller = DoctorExercisesControllerTestHelper.CreateController(
@@ -69,10 +66,8 @@ public class DoctorExercisesControllerGetExercisesTests
                 [new Claim(ClaimTypes.NameIdentifier, doctorId.ToString())],
                 authenticationType: "Test")));
 
-        // Act
-        var result = await controller.GetExercises(cancellationToken: CancellationToken.None);
+        var result = await controller.GetLibrary(CancellationToken.None);
 
-        // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         okResult.Value.Should().BeEquivalentTo(exercises);

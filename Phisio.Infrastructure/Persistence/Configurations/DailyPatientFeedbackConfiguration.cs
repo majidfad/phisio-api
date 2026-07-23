@@ -29,15 +29,19 @@ public class DailyPatientFeedbackConfiguration : IEntityTypeConfiguration<DailyP
         builder.Property(f => f.ImprovementScore)
             .IsRequired();
 
+        builder.Property(f => f.HardnessScore)
+            .IsRequired()
+            .HasDefaultValue(3);
+
         builder.Property(f => f.Comment)
             .HasMaxLength(1000);
 
         builder.ConfigureCreatedAt();
         builder.ConfigureSoftDelete();
 
-        builder.HasIndex(f => new { f.PatientId, f.FeedbackDate })
+        builder.HasIndex(f => new { f.PatientId, f.DoctorId, f.FeedbackDate })
             .IsUnique()
-            .HasDatabaseName("ix_daily_patient_feedbacks_patient_id_feedback_date");
+            .HasDatabaseName("ix_daily_patient_feedbacks_patient_doctor_feedback_date");
 
         builder.HasIndex(f => f.DoctorId);
         builder.HasIndex(f => f.FeedbackDate);

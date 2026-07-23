@@ -207,6 +207,8 @@ public class DoctorPatientsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPatientExerciseHistory(
         Guid patientId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
         var doctorId = User.GetUserId();
@@ -218,6 +220,8 @@ public class DoctorPatientsController : ControllerBase
         var result = await _doctorPatientService.GetExerciseHistoryAsync(
             doctorId.Value,
             patientId,
+            page,
+            pageSize,
             cancellationToken);
 
         if (!result.Succeeded)
@@ -350,6 +354,68 @@ public class DoctorPatientsController : ControllerBase
                 ? StatusCodes.Status404NotFound
                 : StatusCodes.Status400BadRequest;
             return StatusCode(statusCode, new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("{patientId:guid}/programs/{programId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeletePatientProgram(
+        Guid patientId,
+        Guid programId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.DeleteProgramAsync(
+            doctorId.Value,
+            patientId,
+            programId,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
+        }
+
+        return NoContent();
+    }
+
+    [HttpGet("{patientId:guid}/exercise-stats")]
+    [ProducesResponseType(typeof(PatientExerciseStatsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPatientExerciseStats(
+        Guid patientId,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorId = User.GetUserId();
+        if (doctorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _doctorPatientService.GetExerciseStatsAsync(
+            doctorId.Value,
+            patientId,
+            from,
+            to,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
         }
 
         return Ok(result.Value);

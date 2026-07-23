@@ -27,7 +27,6 @@ public class ExercisesControllerGetExercisesTests
                 ExerciseEquipment.None,
                 ExerciseDifficulty.Moderate,
                 CreatedByDoctorId: null,
-                IsClinicShared: true,
                 CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
         };
 
@@ -65,7 +64,6 @@ public class ExercisesControllerGetExerciseTests
             ExerciseEquipment.None,
             ExerciseDifficulty.Moderate,
             CreatedByDoctorId: null,
-            IsClinicShared: true,
             CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
 
         var exerciseService = new Mock<IExerciseService>();

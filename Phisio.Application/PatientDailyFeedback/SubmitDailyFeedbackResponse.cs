@@ -6,5 +6,6 @@ public sealed record SubmitDailyFeedbackResponse(
     Guid DoctorId,
     DateOnly FeedbackDate,
     int ImprovementScore,
+    int HardnessScore,
     string? Comment,
     bool WasUpdated);

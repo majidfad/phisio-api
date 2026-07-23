@@ -1,12 +1,15 @@
 using Phisio.Application.Common;
+using Phisio.Application.Exercises;
 
 namespace Phisio.Application.DoctorExercises;
 
 public interface IDoctorExerciseService
 {
-    Task<AuthResult<IReadOnlyList<DoctorExerciseDto>>> GetExercisesAsync(
+    Task<AuthResult<IReadOnlyList<DoctorExerciseDto>>> GetLibraryAsync(
         Guid doctorId,
-        DoctorExerciseScope scope = DoctorExerciseScope.All,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<IReadOnlyList<ExerciseDto>>> GetCatalogAsync(
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<DoctorExerciseDto>> CreateAsync(

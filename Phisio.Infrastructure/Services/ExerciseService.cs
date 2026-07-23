@@ -24,6 +24,7 @@ public class ExerciseService : IExerciseService
         var exercises = await _dbContext.Exercises
             .AsNoTracking()
             .WhereEnabledStatus(isEnabled)
+            .Where(e => e.CreatedByDoctorId == null)
             .OrderByDescending(e => e.CreatedAt)
             .Select(e => MapToDto(e))
             .ToListAsync(cancellationToken);
@@ -63,7 +64,6 @@ public class ExerciseService : IExerciseService
             Equipment = request.Equipment,
             Difficulty = request.Difficulty,
             CreatedByDoctorId = null,
-            IsClinicShared = true,
         };
 
         _dbContext.Exercises.Add(exercise);
@@ -93,7 +93,6 @@ public class ExerciseService : IExerciseService
         exercise.BodyRegion = request.BodyRegion;
         exercise.Equipment = request.Equipment;
         exercise.Difficulty = request.Difficulty;
-        exercise.IsClinicShared = true;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -160,7 +159,6 @@ public class ExerciseService : IExerciseService
             exercise.Equipment,
             exercise.Difficulty,
             exercise.CreatedByDoctorId,
-            exercise.IsClinicShared,
             exercise.CreatedAt,
             exercise.IsEnabled);
 }

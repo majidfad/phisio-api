@@ -21,9 +21,10 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
         CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var doctorId = await ResolveDoctorIdAsync(patientId, today, cancellationToken);
+        var doctorId = request.DoctorId
+            ?? await ResolveDoctorIdAsync(patientId, today, cancellationToken);
 
-        if (doctorId is null)
+        if (doctorId is null || doctorId == Guid.Empty)
         {
             return AuthResult<SubmitDailyFeedbackResponse>.Failure([PatientDailyFeedbackErrors.DoctorNotFound]);
         }
@@ -35,13 +36,16 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
         var existingFeedback = await _dbContext.DailyPatientFeedbacks
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(
-                feedback => feedback.PatientId == patientId && feedback.FeedbackDate == today,
+                feedback =>
+                    feedback.PatientId == patientId
+                    && feedback.DoctorId == doctorId.Value
+                    && feedback.FeedbackDate == today,
                 cancellationToken);
 
         if (existingFeedback is not null)
         {
-            existingFeedback.DoctorId = doctorId.Value;
             existingFeedback.ImprovementScore = request.ImprovementScore;
+            existingFeedback.HardnessScore = request.HardnessScore;
             existingFeedback.Comment = normalizedComment;
             existingFeedback.IsEnabled = true;
 
@@ -54,6 +58,7 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                     existingFeedback.DoctorId,
                     existingFeedback.FeedbackDate,
                     existingFeedback.ImprovementScore,
+                    existingFeedback.HardnessScore,
                     existingFeedback.Comment,
                     WasUpdated: true));
         }
@@ -65,6 +70,7 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
             DoctorId = doctorId.Value,
             FeedbackDate = today,
             ImprovementScore = request.ImprovementScore,
+            HardnessScore = request.HardnessScore,
             Comment = normalizedComment,
             IsEnabled = true,
         };
@@ -79,6 +85,7 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                 feedback.DoctorId,
                 feedback.FeedbackDate,
                 feedback.ImprovementScore,
+                feedback.HardnessScore,
                 feedback.Comment,
                 WasUpdated: false));
     }

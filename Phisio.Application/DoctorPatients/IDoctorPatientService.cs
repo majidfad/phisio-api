@@ -41,6 +41,8 @@ public interface IDoctorPatientService
     Task<AuthResult<PatientExerciseHistoryResponse>> GetExerciseHistoryAsync(
         Guid doctorId,
         Guid patientId,
+        int page = 1,
+        int pageSize = 10,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<DoctorPatientOverviewDto>> GetPatientOverviewAsync(
@@ -64,5 +66,18 @@ public interface IDoctorPatientService
         Guid patientId,
         Guid programId,
         UpdateExerciseProgramRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<bool>> DeleteProgramAsync(
+        Guid doctorId,
+        Guid patientId,
+        Guid programId,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<PatientExerciseStatsResponse>> GetExerciseStatsAsync(
+        Guid doctorId,
+        Guid patientId,
+        DateOnly? from = null,
+        DateOnly? to = null,
         CancellationToken cancellationToken = default);
 }

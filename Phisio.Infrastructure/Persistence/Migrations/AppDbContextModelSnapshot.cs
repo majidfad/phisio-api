@@ -187,6 +187,11 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                     b.Property<int>("ImprovementScore")
                         .HasColumnType("integer");
 
+                    b.Property<int>("HardnessScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3);
+
                     b.Property<bool>("IsEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -201,9 +206,9 @@ namespace Phisio.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FeedbackDate");
 
-                    b.HasIndex("PatientId", "FeedbackDate")
+                    b.HasIndex("PatientId", "DoctorId", "FeedbackDate")
                         .IsUnique()
-                        .HasDatabaseName("ix_daily_patient_feedbacks_patient_id_feedback_date");
+                        .HasDatabaseName("ix_daily_patient_feedbacks_patient_doctor_feedback_date");
 
                     b.ToTable("daily_patient_feedbacks", (string)null);
                 });
@@ -330,11 +335,6 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(4000)")
                         .HasDefaultValue("");
 
-                    b.Property<bool>("IsClinicShared")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("IsEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -359,8 +359,6 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedByDoctorId");
 
                     b.HasIndex("Title");
-
-                    b.HasIndex("IsClinicShared", "IsEnabled");
 
                     b.ToTable("exercises", (string)null);
                 });

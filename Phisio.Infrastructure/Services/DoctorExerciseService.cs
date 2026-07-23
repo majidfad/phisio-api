@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorExercises;
+using Phisio.Application.Exercises;
 using Phisio.Domain.Entities;
 using Phisio.Infrastructure.Persistence;
 
@@ -15,32 +16,33 @@ public class DoctorExerciseService : IDoctorExerciseService
         _dbContext = dbContext;
     }
 
-    public async Task<AuthResult<IReadOnlyList<DoctorExerciseDto>>> GetExercisesAsync(
+    public async Task<AuthResult<IReadOnlyList<DoctorExerciseDto>>> GetLibraryAsync(
         Guid doctorId,
-        DoctorExerciseScope scope = DoctorExerciseScope.All,
         CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.Exercises
+        var exercises = await _dbContext.Exercises
             .AsNoTracking()
-            .WhereEnabledStatus(isEnabled: true);
-
-        query = scope switch
-        {
-            DoctorExerciseScope.Mine => query.Where(e => e.CreatedByDoctorId == doctorId),
-            DoctorExerciseScope.Clinic => query.Where(e =>
-                e.CreatedByDoctorId == null || e.IsClinicShared),
-            _ => query.Where(e =>
-                e.CreatedByDoctorId == null
-                || e.IsClinicShared
-                || e.CreatedByDoctorId == doctorId),
-        };
-
-        var exercises = await query
+            .WhereEnabledStatus(isEnabled: true)
+            .Where(e => e.CreatedByDoctorId == doctorId)
             .OrderByDescending(e => e.CreatedAt)
             .Select(e => MapToDto(e, doctorId))
             .ToListAsync(cancellationToken);
 
         return AuthResult<IReadOnlyList<DoctorExerciseDto>>.Success(exercises);
+    }
+
+    public async Task<AuthResult<IReadOnlyList<ExerciseDto>>> GetCatalogAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var exercises = await _dbContext.Exercises
+            .AsNoTracking()
+            .WhereEnabledStatus(isEnabled: true)
+            .Where(e => e.CreatedByDoctorId == null)
+            .OrderByDescending(e => e.CreatedAt)
+            .Select(e => MapCatalogDto(e))
+            .ToListAsync(cancellationToken);
+
+        return AuthResult<IReadOnlyList<ExerciseDto>>.Success(exercises);
     }
 
     public async Task<AuthResult<DoctorExerciseDto>> CreateAsync(
@@ -60,7 +62,6 @@ public class DoctorExerciseService : IDoctorExerciseService
             Equipment = request.Equipment,
             Difficulty = request.Difficulty,
             CreatedByDoctorId = doctorId,
-            IsClinicShared = request.IsClinicShared,
         };
 
         _dbContext.Exercises.Add(exercise);
@@ -96,7 +97,6 @@ public class DoctorExerciseService : IDoctorExerciseService
         exercise.BodyRegion = request.BodyRegion;
         exercise.Equipment = request.Equipment;
         exercise.Difficulty = request.Difficulty;
-        exercise.IsClinicShared = request.IsClinicShared;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -139,7 +139,21 @@ public class DoctorExerciseService : IDoctorExerciseService
             exercise.Equipment,
             exercise.Difficulty,
             exercise.CreatedByDoctorId,
-            exercise.IsClinicShared,
             exercise.CreatedByDoctorId == doctorId,
             exercise.CreatedAt);
+
+    private static ExerciseDto MapCatalogDto(Exercise exercise) =>
+        new(
+            exercise.ExerciseId,
+            exercise.Title,
+            exercise.Description,
+            exercise.Instructions,
+            exercise.VideoUrl,
+            exercise.MediaType,
+            exercise.BodyRegion,
+            exercise.Equipment,
+            exercise.Difficulty,
+            exercise.CreatedByDoctorId,
+            exercise.CreatedAt,
+            exercise.IsEnabled);
 }

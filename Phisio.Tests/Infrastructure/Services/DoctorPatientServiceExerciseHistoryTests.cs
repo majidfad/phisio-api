@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Phisio.Application.DoctorPatients;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Services;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
@@ -56,6 +57,9 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         result.Value.Patient.PhoneNumber.Should().Be(patient.PhoneNumber);
         result.Value.Summary.Should().BeEquivalentTo(new PatientExerciseHistorySummaryDto(0, 0, 0, 0));
         result.Value.DailyHistory.Should().BeEmpty();
+        result.Value.TotalDays.Should().Be(0);
+        result.Value.Page.Should().Be(1);
+        result.Value.PageSize.Should().Be(10);
     }
 
     [Fact]
@@ -67,12 +71,22 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var stretch = ExerciseBuilder.Create(title: "Neck Stretch");
         var knee = ExerciseBuilder.Create(title: "Knee Bend");
-        var assignedAt = DateTime.UtcNow.AddDays(-2);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var dayOne = today.AddDays(-2);
+        var dayTwo = today.AddDays(-1);
 
         var assignments = new[]
         {
-            AssignmentBuilder.Create(doctor.Id, patient.Id, stretch.ExerciseId, assignedAt: assignedAt),
-            AssignmentBuilder.Create(doctor.Id, patient.Id, knee.ExerciseId, assignedAt: assignedAt),
+            AssignmentBuilder.Create(
+                doctor.Id,
+                patient.Id,
+                stretch.ExerciseId,
+                scheduledDate: dayOne),
+            AssignmentBuilder.Create(
+                doctor.Id,
+                patient.Id,
+                knee.ExerciseId,
+                scheduledDate: dayTwo),
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
@@ -82,9 +96,6 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             doctorPatients: [relationship]);
 
         var sut = new DoctorPatientService(dbContext.Object);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var firstDay = DateOnly.FromDateTime(assignedAt);
-        var expectedAssignedDays = today.DayNumber - firstDay.DayNumber + 1;
 
         // Act
         var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
@@ -93,12 +104,13 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         result.Succeeded.Should().BeTrue();
         result.Value!.Summary.AssignedExerciseCount.Should().Be(2);
         result.Value.Summary.CompletedDaysCount.Should().Be(0);
-        result.Value.Summary.MissedDaysCount.Should().Be(expectedAssignedDays);
+        result.Value.Summary.MissedDaysCount.Should().Be(2);
         result.Value.Summary.AdherencePercentage.Should().Be(0);
-        result.Value.DailyHistory.Should().HaveCount(expectedAssignedDays);
+        result.Value.TotalDays.Should().Be(2);
+        result.Value.DailyHistory.Should().HaveCount(2);
         result.Value.DailyHistory.Should().OnlyContain(day => !day.IsCompleted && day.CompletedExerciseCount == 0);
-        result.Value.DailyHistory.First().Date.Should().Be(today);
-        result.Value.DailyHistory.Last().Date.Should().Be(firstDay);
+        result.Value.DailyHistory.First().Date.Should().Be(dayTwo);
+        result.Value.DailyHistory.Last().Date.Should().Be(dayOne);
     }
 
     [Fact]
@@ -111,59 +123,90 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var stretch = ExerciseBuilder.Create(title: "Neck Stretch");
         var knee = ExerciseBuilder.Create(title: "Knee Bend");
         var shoulder = ExerciseBuilder.Create(title: "Shoulder Rotation");
-        var assignedAt = DateTime.UtcNow.AddDays(-9);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var dayOne = today.AddDays(-1);
 
-        var stretchAssignment = AssignmentBuilder.Create(doctor.Id, patient.Id, stretch.ExerciseId, assignedAt: assignedAt);
-        var kneeAssignment = AssignmentBuilder.Create(doctor.Id, patient.Id, knee.ExerciseId, assignedAt: assignedAt);
-        var shoulderAssignment = AssignmentBuilder.Create(
+        var stretchToday = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            stretch.ExerciseId,
+            scheduledDate: today);
+        stretchToday.Sets = 3;
+        stretchToday.Reps = "10";
+        stretchToday.HoldSeconds = 5;
+        stretchToday.RestSeconds = 30;
+        stretchToday.Side = ExerciseSide.Left;
+        stretchToday.ClinicianNote = "Watch form";
+        stretchToday.PatientCue = "Keep spine neutral";
+
+        var kneeToday = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            knee.ExerciseId,
+            scheduledDate: today);
+        var shoulderToday = AssignmentBuilder.Create(
             doctor.Id,
             patient.Id,
             shoulder.ExerciseId,
-            assignedAt: assignedAt);
+            scheduledDate: today);
+        var stretchDayOne = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            stretch.ExerciseId,
+            scheduledDate: dayOne);
+        var kneeDayOne = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            knee.ExerciseId,
+            scheduledDate: dayOne);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var completedDates = Enumerable.Range(0, 8)
-            .Select(offset => today.AddDays(-offset))
-            .ToList();
-
-        var completions = completedDates
-            .SelectMany(date => new[]
-            {
-                ExerciseCompletionBuilder.Create(
-                    stretchAssignment.UserExerciseId,
-                    patient.Id,
-                    doctor.Id,
-                    stretch.ExerciseId,
-                    date),
-                ExerciseCompletionBuilder.Create(
-                    kneeAssignment.UserExerciseId,
-                    patient.Id,
-                    doctor.Id,
-                    knee.ExerciseId,
-                    date),
-            })
-            .ToList();
+        var completions = new[]
+        {
+            ExerciseCompletionBuilder.Create(
+                stretchToday.UserExerciseId,
+                patient.Id,
+                doctor.Id,
+                stretch.ExerciseId,
+                today),
+            ExerciseCompletionBuilder.Create(
+                kneeToday.UserExerciseId,
+                patient.Id,
+                doctor.Id,
+                knee.ExerciseId,
+                today),
+            ExerciseCompletionBuilder.Create(
+                stretchDayOne.UserExerciseId,
+                patient.Id,
+                doctor.Id,
+                stretch.ExerciseId,
+                dayOne),
+            ExerciseCompletionBuilder.Create(
+                kneeDayOne.UserExerciseId,
+                patient.Id,
+                doctor.Id,
+                knee.ExerciseId,
+                dayOne),
+        };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             exercises: [stretch, knee, shoulder],
-            userExercises: [stretchAssignment, kneeAssignment, shoulderAssignment],
+            userExercises: [stretchToday, kneeToday, shoulderToday, stretchDayOne, kneeDayOne],
             doctorPatients: [relationship],
             exerciseCompletions: completions);
 
         var sut = new DoctorPatientService(dbContext.Object);
-        var firstDay = DateOnly.FromDateTime(assignedAt);
-        var assignedDays = today.DayNumber - firstDay.DayNumber + 1;
 
         // Act
         var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
 
         // Assert
         result.Succeeded.Should().BeTrue();
-        result.Value!.Summary.AssignedExerciseCount.Should().Be(3);
-        result.Value.Summary.CompletedDaysCount.Should().Be(8);
-        result.Value.Summary.MissedDaysCount.Should().Be(assignedDays - 8);
-        result.Value.Summary.AdherencePercentage.Should().Be((int)Math.Round(8 * 100.0 / assignedDays));
+        result.Value!.Summary.AssignedExerciseCount.Should().Be(5);
+        result.Value.Summary.CompletedDaysCount.Should().Be(2);
+        result.Value.Summary.MissedDaysCount.Should().Be(0);
+        result.Value.Summary.AdherencePercentage.Should().Be(100);
+        result.Value.TotalDays.Should().Be(2);
 
         var latestDay = result.Value.DailyHistory.First();
         latestDay.Date.Should().Be(today);
@@ -172,7 +215,56 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         latestDay.Exercises.Should().HaveCount(3);
         latestDay.Exercises.Single(exercise => exercise.Title == "Shoulder Rotation").IsCompleted.Should().BeFalse();
 
+        var stretchDetail = latestDay.Exercises.Single(exercise => exercise.Title == "Neck Stretch");
+        stretchDetail.Sets.Should().Be(3);
+        stretchDetail.Reps.Should().Be("10");
+        stretchDetail.HoldSeconds.Should().Be(5);
+        stretchDetail.RestSeconds.Should().Be(30);
+        stretchDetail.Side.Should().Be(ExerciseSide.Left);
+        stretchDetail.ClinicianNote.Should().Be("Watch form");
+        stretchDetail.PatientCue.Should().Be("Keep spine neutral");
+
         result.Value.DailyHistory.Should().BeInDescendingOrder(day => day.Date);
+    }
+
+    [Fact]
+    public async Task GetExerciseHistoryAsync_PaginatesDailyHistory()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient();
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
+        var exercise = ExerciseBuilder.Create(title: "Neck Stretch");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var assignments = Enumerable.Range(0, 5)
+            .Select(offset => AssignmentBuilder.Create(
+                doctor.Id,
+                patient.Id,
+                exercise.ExerciseId,
+                scheduledDate: today.AddDays(-offset)))
+            .ToArray();
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            exercises: [exercise],
+            userExercises: assignments,
+            doctorPatients: [relationship]);
+
+        var sut = new DoctorPatientService(dbContext.Object);
+
+        // Act
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, page: 2, pageSize: 2);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Value!.TotalDays.Should().Be(5);
+        result.Value.Page.Should().Be(2);
+        result.Value.PageSize.Should().Be(2);
+        result.Value.DailyHistory.Should().HaveCount(2);
+        result.Value.DailyHistory[0].Date.Should().Be(today.AddDays(-2));
+        result.Value.DailyHistory[1].Date.Should().Be(today.AddDays(-3));
+        result.Value.Summary.AssignedExerciseCount.Should().Be(5);
     }
 
     [Fact]
@@ -185,10 +277,13 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var otherRelationship = DoctorPatientBuilder.Create(otherDoctor.Id, patient.Id);
         var exercise = ExerciseBuilder.Create(title: "Neck Stretch");
-        var assignedAt = DateTime.UtcNow.AddDays(-1);
-        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, assignedAt: assignedAt);
-        var otherAssignment = AssignmentBuilder.Create(otherDoctor.Id, patient.Id, exercise.ExerciseId, assignedAt: assignedAt);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: today);
+        var otherAssignment = AssignmentBuilder.Create(
+            otherDoctor.Id,
+            patient.Id,
+            exercise.ExerciseId,
+            scheduledDate: today);
 
         var completions = new[]
         {
@@ -232,9 +327,8 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var patient = ApplicationUserBuilder.Patient();
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var exercise = ExerciseBuilder.Create(title: "Knee Bend");
-        var assignedAt = DateTime.UtcNow.AddDays(-1);
-        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, assignedAt: assignedAt);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: today);
         var completion = ExerciseCompletionBuilder.Create(
             assignment.UserExerciseId,
             patient.Id,
@@ -276,9 +370,8 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var patient = ApplicationUserBuilder.Patient();
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var exercise = ExerciseBuilder.Create(title: "Knee Bend");
-        var assignedAt = DateTime.UtcNow.AddDays(-1);
-        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, assignedAt: assignedAt);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: today);
         var completion = ExerciseCompletionBuilder.Create(
             assignment.UserExerciseId,
             patient.Id,
@@ -313,9 +406,8 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var patient = ApplicationUserBuilder.Patient();
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var exercise = ExerciseBuilder.Create(title: "Knee Bend");
-        var assignedAt = DateTime.UtcNow.AddDays(-1);
-        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, assignedAt: assignedAt);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: today);
         var completion = ExerciseCompletionBuilder.Create(
             assignment.UserExerciseId,
             patient.Id,
@@ -359,9 +451,8 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var otherRelationship = DoctorPatientBuilder.Create(otherDoctor.Id, patient.Id);
         var exercise = ExerciseBuilder.Create(title: "Knee Bend");
-        var assignedAt = DateTime.UtcNow.AddDays(-1);
-        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, assignedAt: assignedAt);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: today);
         var completion = ExerciseCompletionBuilder.Create(
             assignment.UserExerciseId,
             patient.Id,

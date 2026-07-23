@@ -13,6 +13,5 @@ public sealed record ExerciseDto(
     ExerciseEquipment Equipment,
     ExerciseDifficulty Difficulty,
     Guid? CreatedByDoctorId,
-    bool IsClinicShared,
     DateTime CreatedAt,
     bool IsEnabled = true);

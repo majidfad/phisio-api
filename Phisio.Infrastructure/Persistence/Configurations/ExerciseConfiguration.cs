@@ -55,16 +55,11 @@ public class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
 
         builder.Property(e => e.CreatedByDoctorId);
 
-        builder.Property(e => e.IsClinicShared)
-            .IsRequired()
-            .HasDefaultValue(true);
-
         builder.ConfigureCreatedAt();
         builder.ConfigureSoftDelete();
 
         builder.HasIndex(e => e.Title);
         builder.HasIndex(e => e.CreatedByDoctorId);
-        builder.HasIndex(e => new { e.IsClinicShared, e.IsEnabled });
 
         builder.HasOne<ApplicationUser>()
             .WithMany()

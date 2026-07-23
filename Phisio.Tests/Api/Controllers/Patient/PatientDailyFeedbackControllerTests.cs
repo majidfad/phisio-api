@@ -20,6 +20,7 @@ public class PatientDailyFeedbackControllerTests
         var request = new SubmitDailyFeedbackRequest
         {
             ImprovementScore = 4,
+            HardnessScore = 3,
             Comment = "امروز بهتر بود.",
         };
         var response = new SubmitDailyFeedbackResponse(
@@ -28,6 +29,7 @@ public class PatientDailyFeedbackControllerTests
             doctorId,
             DateOnly.FromDateTime(DateTime.UtcNow),
             4,
+            3,
             "امروز بهتر بود.",
             false);
 

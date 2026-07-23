@@ -10,6 +10,10 @@ public class SubmitDailyFeedbackRequestValidator : AbstractValidator<SubmitDaily
             .InclusiveBetween(1, 5)
             .WithMessage(PatientDailyFeedbackErrors.InvalidImprovementScore);
 
+        RuleFor(request => request.HardnessScore)
+            .InclusiveBetween(1, 5)
+            .WithMessage(PatientDailyFeedbackErrors.InvalidHardnessScore);
+
         RuleFor(request => request.Comment)
             .MaximumLength(1000)
             .When(request => !string.IsNullOrWhiteSpace(request.Comment));

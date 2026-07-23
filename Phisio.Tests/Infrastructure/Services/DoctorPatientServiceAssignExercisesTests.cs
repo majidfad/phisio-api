@@ -45,7 +45,7 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var exercise = ExerciseBuilder.Create();
+        var exercise = ExerciseBuilder.Create(createdByDoctorId: doctor.Id);
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             exercises: [exercise],
@@ -70,7 +70,7 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var exercise = ExerciseBuilder.Create();
+        var exercise = ExerciseBuilder.Create(createdByDoctorId: doctor.Id);
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             exercises: [exercise]);
@@ -94,7 +94,7 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var stretch = ExerciseBuilder.Create(title: "Hamstring Stretch");
+        var stretch = ExerciseBuilder.Create(title: "Hamstring Stretch", createdByDoctorId: doctor.Id);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
@@ -122,8 +122,8 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var stretch = ExerciseBuilder.Create(title: "Hamstring Stretch");
-        var squat = ExerciseBuilder.Create(title: "Squat", id: Guid.NewGuid());
+        var stretch = ExerciseBuilder.Create(title: "Hamstring Stretch", createdByDoctorId: doctor.Id);
+        var squat = ExerciseBuilder.Create(title: "Squat", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
         var dates = new[] { Today, Tomorrow, DayAfterTomorrow };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
@@ -153,8 +153,8 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var existingExercise = ExerciseBuilder.Create(title: "Existing Exercise");
-        var newExercise = ExerciseBuilder.Create(title: "New Exercise", id: Guid.NewGuid());
+        var existingExercise = ExerciseBuilder.Create(title: "Existing Exercise", createdByDoctorId: doctor.Id);
+        var newExercise = ExerciseBuilder.Create(title: "New Exercise", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
@@ -192,7 +192,7 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var exercise = ExerciseBuilder.Create();
+        var exercise = ExerciseBuilder.Create(createdByDoctorId: doctor.Id);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
@@ -227,7 +227,7 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var exercise = ExerciseBuilder.Create();
+        var exercise = ExerciseBuilder.Create(createdByDoctorId: doctor.Id);
         var inactiveAssignment = AssignmentBuilder.Create(
             doctor.Id,
             patient.Id,
@@ -264,7 +264,7 @@ public class DoctorPatientServiceAssignExercisesTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var disabledExercise = ExerciseBuilder.Create(title: "Disabled Exercise");
+        var disabledExercise = ExerciseBuilder.Create(title: "Disabled Exercise", createdByDoctorId: doctor.Id);
         disabledExercise.IsEnabled = false;
 
         var dbContext = AppDbContextMockFactory.CreateMock(

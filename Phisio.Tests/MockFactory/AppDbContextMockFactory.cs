@@ -16,7 +16,8 @@ internal static class AppDbContextMockFactory
         IEnumerable<DoctorProfile>? doctorProfiles = null,
         IEnumerable<DoctorPatient>? doctorPatients = null,
         IEnumerable<ExerciseCompletion>? exerciseCompletions = null,
-        IEnumerable<DailyPatientFeedback>? dailyPatientFeedbacks = null)
+        IEnumerable<DailyPatientFeedback>? dailyPatientFeedbacks = null,
+        IEnumerable<ExerciseProgram>? exercisePrograms = null)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
@@ -70,6 +71,12 @@ internal static class AppDbContextMockFactory
         if (dailyPatientFeedbacks is not null)
         {
             context.DailyPatientFeedbacks.AddRange(dailyPatientFeedbacks);
+            context.SaveChanges();
+        }
+
+        if (exercisePrograms is not null)
+        {
+            context.ExercisePrograms.AddRange(exercisePrograms);
             context.SaveChanges();
         }
 
