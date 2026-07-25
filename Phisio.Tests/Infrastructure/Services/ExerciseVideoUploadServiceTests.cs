@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Moq;
 using Phisio.Application.Admin.Exercises;
 using Phisio.Infrastructure.Services;
@@ -18,7 +19,9 @@ public class ExerciseVideoUploadServiceTests
         var hostEnvironment = new Mock<IHostEnvironment>();
         hostEnvironment.Setup(env => env.ContentRootPath).Returns(contentRoot);
 
-        var sut = new ExerciseVideoUploadService(hostEnvironment.Object);
+        var sut = new ExerciseVideoUploadService(
+            hostEnvironment.Object,
+            Options.Create(new ExerciseUploadOptions()));
         await using var stream = new MemoryStream([0x00, 0x01, 0x02]);
 
         try
@@ -57,7 +60,9 @@ public class ExerciseVideoUploadServiceTests
         var hostEnvironment = new Mock<IHostEnvironment>();
         hostEnvironment.Setup(env => env.ContentRootPath).Returns(contentRoot);
 
-        var sut = new ExerciseVideoUploadService(hostEnvironment.Object);
+        var sut = new ExerciseVideoUploadService(
+            hostEnvironment.Object,
+            Options.Create(new ExerciseUploadOptions()));
         await using var stream = new MemoryStream([0x00]);
 
         try

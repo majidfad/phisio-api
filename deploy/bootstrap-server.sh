@@ -116,8 +116,8 @@ fi
 if [[ -f "${SCRIPT_DIR}/.env.example" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; then
   cp -f "${SCRIPT_DIR}/.env.example" "${APP_DIR}/.env.example"
 fi
-if [[ -f "${SCRIPT_DIR}/proxy.conf" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; then
-  cp -f "${SCRIPT_DIR}/proxy.conf" "${APP_DIR}/proxy.conf"
+if [[ -f "${SCRIPT_DIR}/proxy.conf.template" && "${SCRIPT_DIR}" != "${APP_DIR}" ]]; then
+  cp -f "${SCRIPT_DIR}/proxy.conf.template" "${APP_DIR}/proxy.conf.template"
 fi
 
 if [[ -f "${APP_DIR}/deploy/docker-compose.prod.yml" ]]; then
@@ -130,8 +130,12 @@ if [[ -f "${APP_DIR}/deploy/bootstrap-server.sh" ]]; then
   mv -f "${APP_DIR}/deploy/bootstrap-server.sh" "${APP_DIR}/bootstrap-server.sh"
   chmod +x "${APP_DIR}/bootstrap-server.sh"
 fi
+if [[ -f "${APP_DIR}/deploy/proxy.conf.template" ]]; then
+  mv -f "${APP_DIR}/deploy/proxy.conf.template" "${APP_DIR}/proxy.conf.template"
+fi
+# Legacy filename from older deploys.
 if [[ -f "${APP_DIR}/deploy/proxy.conf" ]]; then
-  mv -f "${APP_DIR}/deploy/proxy.conf" "${APP_DIR}/proxy.conf"
+  mv -f "${APP_DIR}/deploy/proxy.conf" "${APP_DIR}/proxy.conf.template"
 fi
 rmdir "${APP_DIR}/deploy" 2>/dev/null || true
 

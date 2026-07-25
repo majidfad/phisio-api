@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +37,24 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
         services.Configure<SeedAdminOptions>(configuration.GetSection(SeedAdminOptions.SectionName));
+        services.Configure<ExerciseUploadOptions>(configuration.GetSection(ExerciseUploadOptions.SectionName));
+
+        var maxUploadBytes = configuration.GetValue<long?>(
+                $"{ExerciseUploadOptions.SectionName}:MaxFileSizeBytes")
+            ?? ExerciseUploadLimits.MaxFileSizeBytes;
+        if (maxUploadBytes <= 0)
+        {
+            maxUploadBytes = ExerciseUploadLimits.MaxFileSizeBytes;
+        }
+
+        services.Configure<FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = maxUploadBytes;
+        });
+        services.Configure<KestrelServerOptions>(options =>
+        {
+            options.Limits.MaxRequestBodySize = maxUploadBytes;
+        });
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));

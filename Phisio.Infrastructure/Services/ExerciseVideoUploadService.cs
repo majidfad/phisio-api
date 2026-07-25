@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Phisio.Application.Admin.Exercises;
 using Phisio.Application.Common;
 
@@ -11,8 +12,11 @@ public class ExerciseVideoUploadService : IExerciseVideoUploadService
     private const string PublicExercisesPath = "/uploads/exercises";
 
     private readonly string _exercisesDirectory;
+    private readonly long _maxFileSizeBytes;
 
-    public ExerciseVideoUploadService(IHostEnvironment hostEnvironment)
+    public ExerciseVideoUploadService(
+        IHostEnvironment hostEnvironment,
+        IOptions<ExerciseUploadOptions> uploadOptions)
     {
         _exercisesDirectory = Path.Combine(
             hostEnvironment.ContentRootPath,
@@ -20,6 +24,11 @@ public class ExerciseVideoUploadService : IExerciseVideoUploadService
             ExercisesFolderName);
 
         Directory.CreateDirectory(_exercisesDirectory);
+
+        var configured = uploadOptions.Value.MaxFileSizeBytes;
+        _maxFileSizeBytes = configured > 0
+            ? configured
+            : ExerciseUploadLimits.MaxFileSizeBytes;
     }
 
     public async Task<AuthResult<UploadExerciseVideoResponse>> UploadAsync(
@@ -46,9 +55,11 @@ public class ExerciseVideoUploadService : IExerciseVideoUploadService
             return AuthResult<UploadExerciseVideoResponse>.Failure(["Media file is required."]);
         }
 
-        if (fileLength > ExerciseUploadLimits.MaxFileSizeBytes)
+        if (fileLength > _maxFileSizeBytes)
         {
-            return AuthResult<UploadExerciseVideoResponse>.Failure(["Media file must not exceed 50 MB."]);
+            var maxMb = Math.Max(1, _maxFileSizeBytes / (1024 * 1024));
+            return AuthResult<UploadExerciseVideoResponse>.Failure(
+                [$"Media file must not exceed {maxMb} MB."]);
         }
 
         var extension = ResolveAllowedExtension(contentType, originalFileName);
