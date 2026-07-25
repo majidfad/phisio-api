@@ -18,9 +18,9 @@ internal static class ExerciseTestDataBuilder
             Instructions = string.Empty,
             VideoUrl = videoUrl,
             MediaType = ExerciseMediaType.UploadedVideo,
-            BodyRegion = ExerciseBodyRegion.Other,
             Equipment = ExerciseEquipment.None,
             Difficulty = ExerciseDifficulty.Moderate,
+            CategoryIds = [],
         };
 
     public static UpdateExerciseRequest UpdateRequest(
@@ -34,9 +34,9 @@ internal static class ExerciseTestDataBuilder
             Instructions = string.Empty,
             VideoUrl = videoUrl,
             MediaType = ExerciseMediaType.UploadedVideo,
-            BodyRegion = ExerciseBodyRegion.Other,
             Equipment = ExerciseEquipment.None,
             Difficulty = ExerciseDifficulty.Moderate,
+            CategoryIds = [],
         };
 }
 

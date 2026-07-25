@@ -38,11 +38,13 @@ public class DoctorExerciseService : IDoctorExerciseService
             .AsNoTracking()
             .WhereEnabledStatus(isEnabled: true)
             .Where(e => e.CreatedByDoctorId == null)
+            .Include(e => e.CategoryLinks)
+            .ThenInclude(link => link.Category)
             .OrderByDescending(e => e.CreatedAt)
-            .Select(e => MapCatalogDto(e))
             .ToListAsync(cancellationToken);
 
-        return AuthResult<IReadOnlyList<ExerciseDto>>.Success(exercises);
+        return AuthResult<IReadOnlyList<ExerciseDto>>.Success(
+            exercises.Select(ExerciseService.MapToDto).ToList());
     }
 
     public async Task<AuthResult<DoctorExerciseDto>> CreateAsync(
@@ -58,7 +60,6 @@ public class DoctorExerciseService : IDoctorExerciseService
             Instructions = request.Instructions,
             VideoUrl = request.VideoUrl,
             MediaType = request.MediaType,
-            BodyRegion = request.BodyRegion,
             Equipment = request.Equipment,
             Difficulty = request.Difficulty,
             CreatedByDoctorId = doctorId,
@@ -94,7 +95,6 @@ public class DoctorExerciseService : IDoctorExerciseService
         exercise.Instructions = request.Instructions;
         exercise.VideoUrl = request.VideoUrl;
         exercise.MediaType = request.MediaType;
-        exercise.BodyRegion = request.BodyRegion;
         exercise.Equipment = request.Equipment;
         exercise.Difficulty = request.Difficulty;
 
@@ -135,25 +135,9 @@ public class DoctorExerciseService : IDoctorExerciseService
             exercise.Instructions,
             exercise.VideoUrl,
             exercise.MediaType,
-            exercise.BodyRegion,
             exercise.Equipment,
             exercise.Difficulty,
             exercise.CreatedByDoctorId,
             exercise.CreatedByDoctorId == doctorId,
             exercise.CreatedAt);
-
-    private static ExerciseDto MapCatalogDto(Exercise exercise) =>
-        new(
-            exercise.ExerciseId,
-            exercise.Title,
-            exercise.Description,
-            exercise.Instructions,
-            exercise.VideoUrl,
-            exercise.MediaType,
-            exercise.BodyRegion,
-            exercise.Equipment,
-            exercise.Difficulty,
-            exercise.CreatedByDoctorId,
-            exercise.CreatedAt,
-            exercise.IsEnabled);
 }

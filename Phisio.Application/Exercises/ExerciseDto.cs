@@ -1,3 +1,4 @@
+using Phisio.Application.ExerciseCategories;
 using Phisio.Domain.Enums;
 
 namespace Phisio.Application.Exercises;
@@ -9,9 +10,9 @@ public sealed record ExerciseDto(
     string Instructions,
     string? VideoUrl,
     ExerciseMediaType MediaType,
-    ExerciseBodyRegion BodyRegion,
     ExerciseEquipment Equipment,
     ExerciseDifficulty Difficulty,
     Guid? CreatedByDoctorId,
     DateTime CreatedAt,
+    IReadOnlyList<ExerciseCategorySummaryDto> Categories,
     bool IsEnabled = true);

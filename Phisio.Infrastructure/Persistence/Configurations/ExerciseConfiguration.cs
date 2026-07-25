@@ -38,11 +38,6 @@ public class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
             .HasConversion<int>()
             .HasDefaultValue(ExerciseMediaType.UploadedVideo);
 
-        builder.Property(e => e.BodyRegion)
-            .IsRequired()
-            .HasConversion<int>()
-            .HasDefaultValue(ExerciseBodyRegion.Other);
-
         builder.Property(e => e.Equipment)
             .IsRequired()
             .HasConversion<int>()

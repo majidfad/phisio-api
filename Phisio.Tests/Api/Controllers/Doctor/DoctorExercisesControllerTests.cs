@@ -46,7 +46,6 @@ public class DoctorExercisesControllerGetLibraryTests
                 "",
                 "https://example.com/videos/hamstring-stretch.mp4",
                 ExerciseMediaType.UploadedVideo,
-                ExerciseBodyRegion.Other,
                 ExerciseEquipment.None,
                 ExerciseDifficulty.Moderate,
                 CreatedByDoctorId: doctorId,

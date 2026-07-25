@@ -23,11 +23,11 @@ public class ExercisesControllerGetExercisesTests
                 "",
                 "https://example.com/videos/hamstring-stretch",
                 ExerciseMediaType.UploadedVideo,
-                ExerciseBodyRegion.Other,
                 ExerciseEquipment.None,
                 ExerciseDifficulty.Moderate,
                 CreatedByDoctorId: null,
-                CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
+                CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+                Categories: [])
         };
 
         var exerciseService = new Mock<IExerciseService>();
@@ -60,11 +60,11 @@ public class ExercisesControllerGetExerciseTests
             "",
             "https://example.com/videos/hamstring-stretch",
             ExerciseMediaType.UploadedVideo,
-            ExerciseBodyRegion.Other,
             ExerciseEquipment.None,
             ExerciseDifficulty.Moderate,
             CreatedByDoctorId: null,
-            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+            Categories: []);
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.GetByIdAsync(exerciseId, It.IsAny<CancellationToken>()))

@@ -14,6 +14,7 @@ using Phisio.Application.Auth;
 using Phisio.Application.DoctorDashboard;
 using Phisio.Application.DoctorExercises;
 using Phisio.Application.DoctorPatients;
+using Phisio.Application.ExerciseCategories;
 using Phisio.Application.Exercises;
 using Phisio.Application.Patients;
 using Phisio.Application.PatientDailyFeedback;
@@ -84,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminPatientService, AdminPatientService>();
         services.AddScoped<IAdminDoctorService, AdminDoctorService>();
         services.AddScoped<IExerciseService, ExerciseService>();
+        services.AddScoped<IExerciseCategoryService, ExerciseCategoryService>();
         services.AddScoped<IArticleService, ArticleService>();
         services.AddScoped<IExerciseVideoUploadService, ExerciseVideoUploadService>();
         services.AddScoped<IAssignmentService, AssignmentService>();

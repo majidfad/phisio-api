@@ -12,7 +12,6 @@ public class CreateDoctorExerciseRequestValidator : AbstractValidator<CreateDoct
         RuleFor(x => x.Description).NotEmpty().MaximumLength(2000);
         RuleFor(x => x.Instructions).MaximumLength(4000);
         RuleFor(x => x.MediaType).IsInEnum();
-        RuleFor(x => x.BodyRegion).IsInEnum();
         RuleFor(x => x.Equipment).IsInEnum();
         RuleFor(x => x.Difficulty).IsInEnum();
         RuleFor(x => x.VideoUrl)
@@ -35,7 +34,6 @@ public class UpdateDoctorExerciseRequestValidator : AbstractValidator<UpdateDoct
         RuleFor(x => x.Description).NotEmpty().MaximumLength(2000);
         RuleFor(x => x.Instructions).MaximumLength(4000);
         RuleFor(x => x.MediaType).IsInEnum();
-        RuleFor(x => x.BodyRegion).IsInEnum();
         RuleFor(x => x.Equipment).IsInEnum();
         RuleFor(x => x.Difficulty).IsInEnum();
         RuleFor(x => x.VideoUrl)

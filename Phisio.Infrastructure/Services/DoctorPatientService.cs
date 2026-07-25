@@ -650,9 +650,12 @@ public class DoctorPatientService : IDoctorPatientService
             return AuthResult<CreateExerciseProgramResultDto>.Failure([NoValidExercisesError]);
         }
 
-        var scheduleDates = ExerciseProgramSchedule.Expand(
+        // Only materialize assignments from today onward so past dates never
+        // collide with historical assignments kept after a program is deleted.
+        var scheduleDates = ExerciseProgramSchedule.ExpandFrom(
             request.StartDate,
             request.EndDate,
+            DateOnly.FromDateTime(DateTime.UtcNow),
             request.CadenceType,
             request.DaysOfWeekMask,
             request.IntervalDays);
@@ -1129,15 +1132,33 @@ public class DoctorPatientService : IDoctorPatientService
                 && scheduleDates.Contains(assignment.ScheduledDate))
             .ToListAsync(cancellationToken);
 
-        var blocking = existingActive
+        var conflicting = existingActive
             .Where(assignment => assignment.ProgramId != programId)
             .ToList();
-        if (blocking.Count > 0)
+        if (conflicting.Count > 0)
         {
-            return -1;
-        }
+            var conflictingProgramIds = conflicting
+                .Where(assignment => assignment.ProgramId.HasValue)
+                .Select(assignment => assignment.ProgramId!.Value)
+                .Distinct()
+                .ToList();
 
-        var existingByKey = existingActive.ToDictionary(a => (a.ExerciseId, a.ScheduledDate));
+            // The soft-delete query filter hides disabled programs, so this only
+            // returns programs that are still enabled.
+            var enabledProgramIds = conflictingProgramIds.Count == 0
+                ? []
+                : (await _dbContext.ExercisePrograms
+                    .Where(program => conflictingProgramIds.Contains(program.ProgramId))
+                    .Select(program => program.ProgramId)
+                    .ToListAsync(cancellationToken))
+                    .ToHashSet();
+
+            if (conflicting.Any(assignment =>
+                    assignment.ProgramId.HasValue && enabledProgramIds.Contains(assignment.ProgramId.Value)))
+            {
+                return -1;
+            }
+        }
 
         var inactiveAssignments = await _dbContext.UserExercises
             .IgnoreQueryFilters()
@@ -1149,8 +1170,54 @@ public class DoctorPatientService : IDoctorPatientService
                 && scheduleDates.Contains(assignment.ScheduledDate))
             .ToListAsync(cancellationToken);
 
-        var inactiveByKey = inactiveAssignments.ToDictionary(
-            assignment => (assignment.ExerciseId, assignment.ScheduledDate));
+        // Never reuse an assignment that already has a completion for its scheduled
+        // date — otherwise a new program would inherit "done" from a deleted plan.
+        var candidateIds = existingActive
+            .Concat(inactiveAssignments)
+            .Select(assignment => assignment.UserExerciseId)
+            .Distinct()
+            .ToList();
+        var completedAssignmentIds = candidateIds.Count == 0
+            ? []
+            : (await _dbContext.ExerciseCompletions
+                .AsNoTracking()
+                .Where(completion =>
+                    completion.IsEnabled
+                    && candidateIds.Contains(completion.UserExerciseId)
+                    && scheduleDates.Contains(completion.CompletionDate))
+                .Select(completion => new { completion.UserExerciseId, completion.CompletionDate })
+                .ToListAsync(cancellationToken))
+                .Where(completion => existingActive
+                        .Concat(inactiveAssignments)
+                        .Any(assignment =>
+                            assignment.UserExerciseId == completion.UserExerciseId
+                            && assignment.ScheduledDate == completion.CompletionDate))
+                .Select(completion => completion.UserExerciseId)
+                .ToHashSet();
+
+        // Incomplete leftovers from deleted programs / one-off assigns are adopted.
+        // Completed leftovers are retired so a fresh UserExercise is created.
+        foreach (var orphan in conflicting)
+        {
+            if (completedAssignmentIds.Contains(orphan.UserExerciseId))
+            {
+                orphan.IsActive = false;
+                orphan.IsEnabled = false;
+                continue;
+            }
+
+            orphan.ProgramId = programId;
+            ApplyDosage(orphan, itemsByExerciseId[orphan.ExerciseId]);
+        }
+
+        var existingByKey = existingActive
+            .Where(assignment => !completedAssignmentIds.Contains(assignment.UserExerciseId))
+            .ToDictionary(a => (a.ExerciseId, a.ScheduledDate));
+
+        var inactiveByKey = inactiveAssignments
+            .Where(assignment => !completedAssignmentIds.Contains(assignment.UserExerciseId))
+            .GroupBy(assignment => (assignment.ExerciseId, assignment.ScheduledDate))
+            .ToDictionary(group => group.Key, group => group.First());
 
         var assignedAt = DateTime.UtcNow;
         var assignedCount = 0;

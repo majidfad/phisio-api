@@ -16,6 +16,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
     public DbSet<Exercise> Exercises => Set<Exercise>();
 
+    public DbSet<ExerciseCategory> ExerciseCategories => Set<ExerciseCategory>();
+
+    public DbSet<ExerciseCategoryLink> ExerciseCategoryLinks => Set<ExerciseCategoryLink>();
+
     public DbSet<Article> Articles => Set<Article>();
 
     public DbSet<UserExercise> UserExercises => Set<UserExercise>();

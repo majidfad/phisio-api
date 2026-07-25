@@ -9,7 +9,6 @@ public sealed record DoctorExerciseDto(
     string Instructions,
     string? VideoUrl,
     ExerciseMediaType MediaType,
-    ExerciseBodyRegion BodyRegion,
     ExerciseEquipment Equipment,
     ExerciseDifficulty Difficulty,
     Guid? CreatedByDoctorId,
@@ -28,8 +27,6 @@ public sealed class CreateDoctorExerciseRequest
 
     public ExerciseMediaType MediaType { get; set; } = ExerciseMediaType.UploadedVideo;
 
-    public ExerciseBodyRegion BodyRegion { get; set; } = ExerciseBodyRegion.Other;
-
     public ExerciseEquipment Equipment { get; set; } = ExerciseEquipment.None;
 
     public ExerciseDifficulty Difficulty { get; set; } = ExerciseDifficulty.Moderate;
@@ -46,8 +43,6 @@ public sealed class UpdateDoctorExerciseRequest
     public string? VideoUrl { get; set; }
 
     public ExerciseMediaType MediaType { get; set; } = ExerciseMediaType.UploadedVideo;
-
-    public ExerciseBodyRegion BodyRegion { get; set; } = ExerciseBodyRegion.Other;
 
     public ExerciseEquipment Equipment { get; set; } = ExerciseEquipment.None;
 

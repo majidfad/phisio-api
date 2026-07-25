@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Admin.Exercises;
 using Phisio.Application.Common;
+using Phisio.Application.ExerciseCategories;
 using Phisio.Application.Exercises;
 using Phisio.Domain.Entities;
-using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Persistence;
 
 namespace Phisio.Infrastructure.Services;
@@ -25,11 +25,13 @@ public class ExerciseService : IExerciseService
             .AsNoTracking()
             .WhereEnabledStatus(isEnabled)
             .Where(e => e.CreatedByDoctorId == null)
+            .Include(e => e.CategoryLinks)
+            .ThenInclude(link => link.Category)
             .OrderByDescending(e => e.CreatedAt)
-            .Select(e => MapToDto(e))
             .ToListAsync(cancellationToken);
 
-        return AuthResult<IReadOnlyList<ExerciseDto>>.Success(exercises);
+        return AuthResult<IReadOnlyList<ExerciseDto>>.Success(
+            exercises.Select(MapToDto).ToList());
     }
 
     public async Task<AuthResult<ExerciseDto>> GetByIdAsync(
@@ -38,6 +40,8 @@ public class ExerciseService : IExerciseService
     {
         var exercise = await _dbContext.Exercises
             .AsNoTracking()
+            .Include(e => e.CategoryLinks)
+            .ThenInclude(link => link.Category)
             .FirstOrDefaultAsync(e => e.ExerciseId == exerciseId, cancellationToken);
 
         if (exercise is null)
@@ -52,6 +56,13 @@ public class ExerciseService : IExerciseService
         CreateExerciseDto request,
         CancellationToken cancellationToken = default)
     {
+        var categoryIds = NormalizeCategoryIds(request.CategoryIds);
+        var categoryResult = await ValidateCategoriesAsync(categoryIds, cancellationToken);
+        if (!categoryResult.Succeeded)
+        {
+            return AuthResult<ExerciseDto>.Failure(categoryResult.Errors);
+        }
+
         var exercise = new Exercise
         {
             ExerciseId = Guid.NewGuid(),
@@ -60,16 +71,24 @@ public class ExerciseService : IExerciseService
             Instructions = request.Instructions,
             VideoUrl = request.VideoUrl,
             MediaType = request.MediaType,
-            BodyRegion = request.BodyRegion,
             Equipment = request.Equipment,
             Difficulty = request.Difficulty,
             CreatedByDoctorId = null,
         };
 
+        foreach (var categoryId in categoryIds)
+        {
+            exercise.CategoryLinks.Add(new ExerciseCategoryLink
+            {
+                ExerciseId = exercise.ExerciseId,
+                ExerciseCategoryId = categoryId,
+            });
+        }
+
         _dbContext.Exercises.Add(exercise);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return AuthResult<ExerciseDto>.Success(MapToDto(exercise));
+        return await GetByIdAsync(exercise.ExerciseId, cancellationToken);
     }
 
     public async Task<AuthResult<ExerciseDto>> UpdateAsync(
@@ -77,7 +96,15 @@ public class ExerciseService : IExerciseService
         UpdateExerciseRequest request,
         CancellationToken cancellationToken = default)
     {
+        var categoryIds = NormalizeCategoryIds(request.CategoryIds);
+        var categoryResult = await ValidateCategoriesAsync(categoryIds, cancellationToken);
+        if (!categoryResult.Succeeded)
+        {
+            return AuthResult<ExerciseDto>.Failure(categoryResult.Errors);
+        }
+
         var exercise = await _dbContext.Exercises
+            .Include(e => e.CategoryLinks)
             .FirstOrDefaultAsync(e => e.ExerciseId == exerciseId, cancellationToken);
 
         if (exercise is null)
@@ -90,13 +117,24 @@ public class ExerciseService : IExerciseService
         exercise.Instructions = request.Instructions;
         exercise.VideoUrl = request.VideoUrl;
         exercise.MediaType = request.MediaType;
-        exercise.BodyRegion = request.BodyRegion;
         exercise.Equipment = request.Equipment;
         exercise.Difficulty = request.Difficulty;
 
+        _dbContext.ExerciseCategoryLinks.RemoveRange(exercise.CategoryLinks);
+        exercise.CategoryLinks.Clear();
+
+        foreach (var categoryId in categoryIds)
+        {
+            exercise.CategoryLinks.Add(new ExerciseCategoryLink
+            {
+                ExerciseId = exercise.ExerciseId,
+                ExerciseCategoryId = categoryId,
+            });
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return AuthResult<ExerciseDto>.Success(MapToDto(exercise));
+        return await GetByIdAsync(exercise.ExerciseId, cancellationToken);
     }
 
     public async Task<AuthResult<bool>> DeleteAsync(
@@ -115,7 +153,12 @@ public class ExerciseService : IExerciseService
             .Where(ue => ue.ExerciseId == exerciseId)
             .ToListAsync(cancellationToken);
 
-        SoftDeleteExtensions.SoftDeleteRange(assignments);
+        foreach (var assignment in assignments)
+        {
+            assignment.IsActive = false;
+            assignment.SoftDelete();
+        }
+
         exercise.SoftDelete();
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -155,10 +198,45 @@ public class ExerciseService : IExerciseService
             exercise.Instructions,
             exercise.VideoUrl,
             exercise.MediaType,
-            exercise.BodyRegion,
             exercise.Equipment,
             exercise.Difficulty,
             exercise.CreatedByDoctorId,
             exercise.CreatedAt,
+            exercise.CategoryLinks
+                .Where(link => link.Category is not null && link.Category.IsEnabled)
+                .OrderBy(link => link.Category.SortOrder)
+                .ThenBy(link => link.Category.NameEn)
+                .Select(link => new ExerciseCategorySummaryDto(
+                    link.ExerciseCategoryId,
+                    link.Category.NameFa,
+                    link.Category.NameEn))
+                .ToList(),
             exercise.IsEnabled);
+
+    private static List<Guid> NormalizeCategoryIds(IEnumerable<Guid>? categoryIds) =>
+        (categoryIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+    private async Task<AuthResult<bool>> ValidateCategoriesAsync(
+        IReadOnlyCollection<Guid> categoryIds,
+        CancellationToken cancellationToken)
+    {
+        if (categoryIds.Count == 0)
+        {
+            return AuthResult<bool>.Success(true);
+        }
+
+        var existingCount = await _dbContext.ExerciseCategories
+            .Where(category => categoryIds.Contains(category.ExerciseCategoryId))
+            .CountAsync(cancellationToken);
+
+        if (existingCount != categoryIds.Count)
+        {
+            return AuthResult<bool>.Failure(["One or more categories were not found."]);
+        }
+
+        return AuthResult<bool>.Success(true);
+    }
 }

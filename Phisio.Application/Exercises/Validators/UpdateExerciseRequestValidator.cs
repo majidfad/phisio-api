@@ -21,14 +21,14 @@ public class UpdateExerciseRequestValidator : AbstractValidator<UpdateExerciseRe
         RuleFor(x => x.MediaType)
             .IsInEnum();
 
-        RuleFor(x => x.BodyRegion)
-            .IsInEnum();
-
         RuleFor(x => x.Equipment)
             .IsInEnum();
 
         RuleFor(x => x.Difficulty)
             .IsInEnum();
+
+        RuleForEach(x => x.CategoryIds)
+            .NotEmpty();
 
         RuleFor(x => x.VideoUrl)
             .MaximumLength(2000)

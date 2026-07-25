@@ -24,11 +24,11 @@ public class AdminExercisesControllerGetExercisesTests
                 "",
                 "https://example.com/videos/hamstring-stretch",
                 ExerciseMediaType.UploadedVideo,
-                ExerciseBodyRegion.Other,
                 ExerciseEquipment.None,
                 ExerciseDifficulty.Moderate,
                 CreatedByDoctorId: null,
-                CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc))
+                CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+                Categories: [])
         };
 
         var exerciseService = new Mock<IExerciseService>();
@@ -61,11 +61,11 @@ public class AdminExercisesControllerGetExerciseTests
             "",
             "https://example.com/videos/hamstring-stretch",
             ExerciseMediaType.UploadedVideo,
-            ExerciseBodyRegion.Other,
             ExerciseEquipment.None,
             ExerciseDifficulty.Moderate,
             CreatedByDoctorId: null,
-            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+            Categories: []);
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.GetByIdAsync(exerciseId, It.IsAny<CancellationToken>()))
@@ -123,11 +123,11 @@ public class AdminExercisesControllerCreateExerciseTests
             request.Instructions,
             request.VideoUrl,
             request.MediaType,
-            request.BodyRegion,
             request.Equipment,
             request.Difficulty,
             CreatedByDoctorId: null,
-            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+            Categories: []);
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.CreateAsync(request, It.IsAny<CancellationToken>()))
@@ -191,11 +191,11 @@ public class AdminExercisesControllerUpdateExerciseTests
             request.Instructions,
             request.VideoUrl,
             request.MediaType,
-            request.BodyRegion,
             request.Equipment,
             request.Difficulty,
             CreatedByDoctorId: null,
-            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc));
+            CreatedAt: new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+            Categories: []);
 
         var exerciseService = new Mock<IExerciseService>();
         exerciseService.Setup(service => service.UpdateAsync(exerciseId, request, It.IsAny<CancellationToken>()))
