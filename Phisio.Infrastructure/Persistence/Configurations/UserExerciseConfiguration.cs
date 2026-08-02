@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Phisio.Domain.Entities;
-using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
 
 namespace Phisio.Infrastructure.Persistence.Configurations;
@@ -38,15 +37,6 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
 
         builder.Property(ue => ue.Reps)
             .HasMaxLength(50);
-
-        builder.Property(ue => ue.HoldSeconds);
-
-        builder.Property(ue => ue.RestSeconds);
-
-        builder.Property(ue => ue.Side)
-            .IsRequired()
-            .HasConversion<int>()
-            .HasDefaultValue(ExerciseSide.NotApplicable);
 
         builder.Property(ue => ue.ClinicianNote)
             .HasMaxLength(1000);

@@ -12,8 +12,5 @@ public sealed record DoctorPatientExerciseDto(
     DateOnly ScheduledDate,
     int? Sets,
     string? Reps,
-    int? HoldSeconds,
-    int? RestSeconds,
-    ExerciseSide Side,
     string? ClinicianNote,
     string? PatientCue);

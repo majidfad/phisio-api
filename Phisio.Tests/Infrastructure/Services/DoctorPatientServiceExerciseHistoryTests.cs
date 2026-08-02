@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Phisio.Application.DoctorPatients;
-using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Services;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
@@ -133,9 +132,6 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             scheduledDate: today);
         stretchToday.Sets = 3;
         stretchToday.Reps = "10";
-        stretchToday.HoldSeconds = 5;
-        stretchToday.RestSeconds = 30;
-        stretchToday.Side = ExerciseSide.Left;
         stretchToday.ClinicianNote = "Watch form";
         stretchToday.PatientCue = "Keep spine neutral";
 
@@ -218,9 +214,6 @@ public class DoctorPatientServiceGetExerciseHistoryTests
         var stretchDetail = latestDay.Exercises.Single(exercise => exercise.Title == "Neck Stretch");
         stretchDetail.Sets.Should().Be(3);
         stretchDetail.Reps.Should().Be("10");
-        stretchDetail.HoldSeconds.Should().Be(5);
-        stretchDetail.RestSeconds.Should().Be(30);
-        stretchDetail.Side.Should().Be(ExerciseSide.Left);
         stretchDetail.ClinicianNote.Should().Be("Watch form");
         stretchDetail.PatientCue.Should().Be("Keep spine neutral");
 

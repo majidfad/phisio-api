@@ -37,8 +37,5 @@ public sealed record PatientExerciseHistoryExerciseDto(
     bool IsCompleted,
     int? Sets,
     string? Reps,
-    int? HoldSeconds,
-    int? RestSeconds,
-    ExerciseSide Side,
     string? ClinicianNote,
     string? PatientCue);

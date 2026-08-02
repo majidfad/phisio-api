@@ -60,9 +60,6 @@ public class PatientExerciseService : IPatientExerciseService
                 completion != null,
                 ue.Sets,
                 ue.Reps,
-                ue.HoldSeconds,
-                ue.RestSeconds,
-                ue.Side,
                 ue.PatientCue))
             .ToListAsync(cancellationToken);
 
@@ -123,9 +120,6 @@ public class PatientExerciseService : IPatientExerciseService
                     completion != null,
                     ue.Sets,
                     ue.Reps,
-                    ue.HoldSeconds,
-                    ue.RestSeconds,
-                    ue.Side,
                     ue.PatientCue),
             })
             .ToListAsync(cancellationToken);

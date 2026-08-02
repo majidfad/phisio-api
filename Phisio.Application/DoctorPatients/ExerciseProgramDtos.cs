@@ -36,9 +36,6 @@ public sealed record ExerciseProgramExerciseDto(
     string ExerciseName,
     int? Sets,
     string? Reps,
-    int? HoldSeconds,
-    int? RestSeconds,
-    ExerciseSide Side,
     string? ClinicianNote,
     string? PatientCue);
 

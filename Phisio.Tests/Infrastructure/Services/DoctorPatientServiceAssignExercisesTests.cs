@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Phisio.Application.DoctorPatients;
-using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Services;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
@@ -16,8 +15,7 @@ public class DoctorPatientServiceAssignExercisesTests
         Guid exerciseId,
         int? sets = 3,
         string? reps = "10") =>
-        new(exerciseId, Sets: sets, Reps: reps, HoldSeconds: null, RestSeconds: null,
-            Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null);
+        new(exerciseId, Sets: sets, Reps: reps, ClinicianNote: null, PatientCue: null);
 
     [Fact]
     public async Task AssignExercisesAsync_WhenNoExercisesSelected_ReturnsFailure()

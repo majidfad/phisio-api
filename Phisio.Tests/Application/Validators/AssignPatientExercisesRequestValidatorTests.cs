@@ -1,6 +1,5 @@
 using FluentValidation.TestHelper;
 using Phisio.Application.DoctorPatients;
-using Phisio.Domain.Enums;
 using Phisio.Application.DoctorPatients.Validators;
 
 namespace Phisio.Tests.Application.Validators;
@@ -10,8 +9,7 @@ public class AssignPatientExercisesRequestValidatorTests
     private readonly AssignPatientExercisesRequestValidator _validator = new();
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
     private static AssignPatientExerciseItem Item(Guid exerciseId) =>
-        new(exerciseId, Sets: 3, Reps: "10", HoldSeconds: null, RestSeconds: null,
-            Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null);
+        new(exerciseId, Sets: 3, Reps: "10", ClinicianNote: null, PatientCue: null);
 
     [Fact]
     public void Validate_WhenExerciseIdsAreEmpty_ReturnsError()

@@ -164,9 +164,6 @@ public class DoctorPatientsControllerGetPatientExercisesTests
                 DateOnly.FromDateTime(DateTime.UtcNow),
                 Sets: 3,
                 Reps: "10",
-                HoldSeconds: null,
-                RestSeconds: null,
-                Side: ExerciseSide.NotApplicable,
                 ClinicianNote: null,
                 PatientCue: null)
         };
@@ -221,8 +218,7 @@ public class DoctorPatientsControllerAssignPatientExercisesTests
         var exerciseId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
         var request = new AssignPatientExercisesRequest(
             [new AssignPatientExerciseItem(
-                exerciseId, Sets: 3, Reps: "10", HoldSeconds: null, RestSeconds: null,
-                Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null)],
+                exerciseId, Sets: 3, Reps: "10", ClinicianNote: null, PatientCue: null)],
             [DateOnly.FromDateTime(DateTime.UtcNow)]);
         var response = new AssignPatientExercisesResultDto(1);
 
@@ -268,9 +264,6 @@ public class DoctorPatientsControllerGetPatientExerciseHistoryTests
                             true,
                             3,
                             "10",
-                            5,
-                            30,
-                            Phisio.Domain.Enums.ExerciseSide.Left,
                             "Watch form",
                             "Keep spine neutral"),
                     ],

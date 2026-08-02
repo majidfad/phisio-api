@@ -21,8 +21,7 @@ public class DoctorPatientServiceCreateProgramTests
         Guid exerciseId,
         int? sets = 3,
         string? reps = "10") =>
-        new(exerciseId, Sets: sets, Reps: reps, HoldSeconds: null, RestSeconds: null,
-            Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null);
+        new(exerciseId, Sets: sets, Reps: reps, ClinicianNote: null, PatientCue: null);
 
     private static CreateExerciseProgramRequest DailyRequest(
         DateOnly startDate, DateOnly endDate, params Guid[] exerciseIds) =>

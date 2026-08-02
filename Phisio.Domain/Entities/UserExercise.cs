@@ -1,5 +1,4 @@
 using Phisio.Domain.Common;
-using Phisio.Domain.Enums;
 
 namespace Phisio.Domain.Entities;
 
@@ -23,12 +22,6 @@ public class UserExercise : BaseEntity
 
     public string? Reps { get; set; }
 
-    public int? HoldSeconds { get; set; }
-
-    public int? RestSeconds { get; set; }
-
-    public ExerciseSide Side { get; set; } = ExerciseSide.NotApplicable;
-
     public string? ClinicianNote { get; set; }
 
     public string? PatientCue { get; set; }
@@ -47,18 +40,12 @@ public class UserExercise : BaseEntity
         DateTime assignedAt,
         int? sets,
         string? reps,
-        int? holdSeconds,
-        int? restSeconds,
-        ExerciseSide side,
         string? clinicianNote,
         string? patientCue)
     {
         AssignedAt = assignedAt;
         Sets = sets;
         Reps = reps;
-        HoldSeconds = holdSeconds;
-        RestSeconds = restSeconds;
-        Side = side;
         ClinicianNote = clinicianNote;
         PatientCue = patientCue;
     }

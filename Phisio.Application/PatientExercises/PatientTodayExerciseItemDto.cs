@@ -13,7 +13,4 @@ public sealed record PatientTodayExerciseItemDto(
     bool CompletedToday,
     int? Sets,
     string? Reps,
-    int? HoldSeconds,
-    int? RestSeconds,
-    ExerciseSide Side,
     string? PatientCue);

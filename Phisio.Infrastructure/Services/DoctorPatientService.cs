@@ -187,9 +187,6 @@ public class DoctorPatientService : IDoctorPatientService
                 ue.ScheduledDate,
                 ue.Sets,
                 ue.Reps,
-                ue.HoldSeconds,
-                ue.RestSeconds,
-                ue.Side,
                 ue.ClinicianNote,
                 ue.PatientCue))
             .ToListAsync(cancellationToken);
@@ -343,9 +340,6 @@ public class DoctorPatientService : IDoctorPatientService
             assignedAt,
             dosage.Sets,
             dosage.Reps,
-            dosage.HoldSeconds,
-            dosage.RestSeconds,
-            dosage.Side,
             dosage.ClinicianNote,
             dosage.PatientCue);
     }
@@ -398,9 +392,6 @@ public class DoctorPatientService : IDoctorPatientService
                 ue.ScheduledDate,
                 ue.Sets,
                 ue.Reps,
-                ue.HoldSeconds,
-                ue.RestSeconds,
-                ue.Side,
                 ue.ClinicianNote,
                 ue.PatientCue))
             .ToListAsync(cancellationToken);
@@ -487,9 +478,6 @@ public class DoctorPatientService : IDoctorPatientService
                     completedSet.Contains(assignment.UserExerciseId),
                     assignment.Sets,
                     assignment.Reps,
-                    assignment.HoldSeconds,
-                    assignment.RestSeconds,
-                    assignment.Side,
                     assignment.ClinicianNote,
                     assignment.PatientCue))
                 .ToList();
@@ -695,9 +683,6 @@ public class DoctorPatientService : IDoctorPatientService
                 ExerciseId = exerciseId,
                 Sets = dosage.Sets,
                 Reps = dosage.Reps,
-                HoldSeconds = dosage.HoldSeconds,
-                RestSeconds = dosage.RestSeconds,
-                Side = dosage.Side,
                 ClinicianNote = dosage.ClinicianNote,
                 PatientCue = dosage.PatientCue,
                 IsEnabled = true,
@@ -806,9 +791,6 @@ public class DoctorPatientService : IDoctorPatientService
                 ExerciseId = exerciseId,
                 Sets = dosage.Sets,
                 Reps = dosage.Reps,
-                HoldSeconds = dosage.HoldSeconds,
-                RestSeconds = dosage.RestSeconds,
-                Side = dosage.Side,
                 ClinicianNote = dosage.ClinicianNote,
                 PatientCue = dosage.PatientCue,
                 IsEnabled = true,
@@ -1247,9 +1229,6 @@ public class DoctorPatientService : IDoctorPatientService
                     e.Exercise?.Title ?? string.Empty,
                     e.Sets,
                     e.Reps,
-                    e.HoldSeconds,
-                    e.RestSeconds,
-                    e.Side,
                     e.ClinicianNote,
                     e.PatientCue))
                 .ToList(),
@@ -1263,9 +1242,6 @@ public class DoctorPatientService : IDoctorPatientService
         DateOnly ScheduledDate,
         int? Sets,
         string? Reps,
-        int? HoldSeconds,
-        int? RestSeconds,
-        ExerciseSide Side,
         string? ClinicianNote,
         string? PatientCue);
 }

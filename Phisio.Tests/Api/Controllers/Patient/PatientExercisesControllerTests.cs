@@ -34,9 +34,6 @@ public class PatientExercisesControllerTests
                     true,
                     Sets: 3,
                     Reps: "10",
-                    HoldSeconds: null,
-                    RestSeconds: null,
-                    Side: ExerciseSide.NotApplicable,
                     PatientCue: null)
             ]);
 
@@ -156,9 +153,6 @@ public class PatientExercisesControllerTests
                         false,
                         Sets: 3,
                         Reps: "10",
-                        HoldSeconds: null,
-                        RestSeconds: null,
-                        Side: ExerciseSide.NotApplicable,
                         PatientCue: null),
                 ]),
         ]);

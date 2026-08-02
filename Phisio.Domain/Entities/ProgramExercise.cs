@@ -1,5 +1,4 @@
 using Phisio.Domain.Common;
-using Phisio.Domain.Enums;
 
 namespace Phisio.Domain.Entities;
 
@@ -14,12 +13,6 @@ public class ProgramExercise : BaseEntity
     public int? Sets { get; set; }
 
     public string? Reps { get; set; }
-
-    public int? HoldSeconds { get; set; }
-
-    public int? RestSeconds { get; set; }
-
-    public ExerciseSide Side { get; set; } = ExerciseSide.NotApplicable;
 
     public string? ClinicianNote { get; set; }
 
