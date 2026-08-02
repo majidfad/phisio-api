@@ -12,8 +12,11 @@ public class DoctorPatientServiceAssignExercisesTests
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
     private static readonly DateOnly Tomorrow = Today.AddDays(1);
     private static readonly DateOnly DayAfterTomorrow = Today.AddDays(2);
-    private static AssignPatientExerciseItem Item(Guid exerciseId) =>
-        new(exerciseId, Sets: 3, Reps: "10", HoldSeconds: null, RestSeconds: null,
+    private static AssignPatientExerciseItem Item(
+        Guid exerciseId,
+        int? sets = 3,
+        string? reps = "10") =>
+        new(exerciseId, Sets: sets, Reps: reps, HoldSeconds: null, RestSeconds: null,
             Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null);
 
     [Fact]
@@ -148,42 +151,69 @@ public class DoctorPatientServiceAssignExercisesTests
     }
 
     [Fact]
-    public async Task AssignExercisesAsync_WhenDuplicateAssignmentExists_ReturnsFailure()
+    public async Task AssignExercisesAsync_WhenExistingExerciseOnSameDay_MergesDosageAndAddsNewExercises()
     {
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var existingExercise = ExerciseBuilder.Create(title: "Existing Exercise", createdByDoctorId: doctor.Id);
-        var newExercise = ExerciseBuilder.Create(title: "New Exercise", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
+        var neckStretch = ExerciseBuilder.Create(title: "Neck Stretch", createdByDoctorId: doctor.Id);
+        var shoulderRotation = ExerciseBuilder.Create(
+            title: "Shoulder Rotation", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
+        var backExtension = ExerciseBuilder.Create(
+            title: "Back Extension", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
+
+        var existingNeck = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            neckStretch.ExerciseId,
+            scheduledDate: Today);
+        existingNeck.Sets = 3;
+        existingNeck.Reps = "10";
+
+        var existingShoulder = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            shoulderRotation.ExerciseId,
+            scheduledDate: Today);
+        existingShoulder.Sets = 3;
+        existingShoulder.Reps = "15";
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
-            exercises: [existingExercise, newExercise],
+            exercises: [neckStretch, shoulderRotation, backExtension],
             doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id)],
-            userExercises:
-            [
-                AssignmentBuilder.Create(
-                    doctor.Id,
-                    patient.Id,
-                    existingExercise.ExerciseId,
-                    scheduledDate: Today),
-            ]);
+            userExercises: [existingNeck, existingShoulder]);
 
         var sut = new DoctorPatientService(dbContext.Object);
 
-        // Act
+        // Act — reassign Neck Stretch with 20 reps and add Back Extension
         var result = await sut.AssignExercisesAsync(
             doctor.Id,
             patient.Id,
             new AssignPatientExercisesRequest(
-                [Item(existingExercise.ExerciseId), Item(newExercise.ExerciseId)],
+                [
+                    Item(neckStretch.ExerciseId, sets: 3, reps: "20"),
+                    Item(backExtension.ExerciseId, sets: 3, reps: "12"),
+                ],
                 [Today]));
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be(DoctorPatientErrors.DuplicateAssignment);
-        dbContext.Object.UserExercises.Should().HaveCount(1);
+        result.Succeeded.Should().BeTrue();
+        result.Value!.AssignedCount.Should().Be(2);
+
+        var schedule = dbContext.Object.UserExercises
+            .Where(ue => ue.IsActive && ue.IsEnabled && ue.ScheduledDate == Today)
+            .ToList();
+        schedule.Should().HaveCount(3);
+
+        var mergedNeck = schedule.Single(ue => ue.ExerciseId == neckStretch.ExerciseId);
+        mergedNeck.UserExerciseId.Should().Be(existingNeck.UserExerciseId);
+        mergedNeck.Reps.Should().Be("20");
+
+        schedule.Should().Contain(ue =>
+            ue.ExerciseId == shoulderRotation.ExerciseId && ue.Reps == "15");
+        schedule.Should().Contain(ue =>
+            ue.ExerciseId == backExtension.ExerciseId && ue.Reps == "12");
     }
 
     [Fact]

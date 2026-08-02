@@ -43,20 +43,24 @@ public class AssignmentService : IAssignmentService
             return AuthResult<AssignmentDto>.Failure(["Exercise not found."]);
         }
 
-        var activeAssignmentExists = await _dbContext.UserExercises
-            .AnyAsync(
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var existingActive = await _dbContext.UserExercises
+            .FirstOrDefaultAsync(
                 ue => ue.PatientId == request.PatientId
                     && ue.DoctorId == doctorId
                     && ue.ExerciseId == request.ExerciseId
-                    && ue.ScheduledDate == DateOnly.FromDateTime(DateTime.UtcNow)
+                    && ue.ScheduledDate == today
                     && ue.IsActive
                     && ue.IsEnabled,
                 cancellationToken);
 
-        if (activeAssignmentExists)
+        if (existingActive is not null)
         {
-            return AuthResult<AssignmentDto>.Failure(
-                ["This exercise is already actively assigned to the patient."]);
+            // Idempotent merge: keep a single row for this exercise/day.
+            existingActive.AssignedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return AuthResult<AssignmentDto>.Success(MapToDto(existingActive, exercise.Title));
         }
 
         var assignment = new UserExercise
@@ -66,7 +70,7 @@ public class AssignmentService : IAssignmentService
             PatientId = request.PatientId,
             ExerciseId = request.ExerciseId,
             AssignedAt = DateTime.UtcNow,
-            ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            ScheduledDate = today,
             IsActive = true
         };
 
@@ -78,8 +82,25 @@ public class AssignmentService : IAssignmentService
         }
         catch (DbUpdateException)
         {
-            return AuthResult<AssignmentDto>.Failure(
-                ["This exercise is already actively assigned to the patient."]);
+            // Unique index race: reload the winner and treat as merged.
+            var raced = await _dbContext.UserExercises
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    ue => ue.PatientId == request.PatientId
+                        && ue.DoctorId == doctorId
+                        && ue.ExerciseId == request.ExerciseId
+                        && ue.ScheduledDate == today
+                        && ue.IsActive
+                        && ue.IsEnabled,
+                    cancellationToken);
+
+            if (raced is null)
+            {
+                return AuthResult<AssignmentDto>.Failure(
+                    ["Unable to assign exercise due to a concurrent update."]);
+            }
+
+            return AuthResult<AssignmentDto>.Success(MapToDto(raced, exercise.Title));
         }
 
         return AuthResult<AssignmentDto>.Success(MapToDto(assignment, exercise.Title));

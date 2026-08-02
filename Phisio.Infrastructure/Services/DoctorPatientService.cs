@@ -15,7 +15,6 @@ public class DoctorPatientService : IDoctorPatientService
     public const string NoExercisesSelectedError = DoctorPatientErrors.NoExercisesSelected;
     public const string NoDatesSelectedError = DoctorPatientErrors.NoDatesSelected;
     public const string NoValidExercisesError = DoctorPatientErrors.NoValidExercises;
-    public const string DuplicateExerciseAssignmentError = DoctorPatientErrors.DuplicateAssignment;
 
     private readonly AppDbContext _dbContext;
 
@@ -261,8 +260,9 @@ public class DoctorPatientService : IDoctorPatientService
             return AuthResult<AssignPatientExercisesResultDto>.Failure([NoValidExercisesError]);
         }
 
+        // Merge into the patient's day schedule: same exercise+date updates
+        // dosage in place; different exercises coexist on the same day.
         var existingActiveAssignments = await _dbContext.UserExercises
-            .AsNoTracking()
             .Where(assignment =>
                 assignment.DoctorId == doctorId
                 && assignment.PatientId == patientId
@@ -270,13 +270,11 @@ public class DoctorPatientService : IDoctorPatientService
                 && assignment.IsEnabled
                 && validExerciseIds.Contains(assignment.ExerciseId)
                 && distinctScheduledDates.Contains(assignment.ScheduledDate))
-            .Select(assignment => new { assignment.ExerciseId, assignment.ScheduledDate })
             .ToListAsync(cancellationToken);
 
-        if (existingActiveAssignments.Count > 0)
-        {
-            return AuthResult<AssignPatientExercisesResultDto>.Failure([DuplicateExerciseAssignmentError]);
-        }
+        var existingByKey = existingActiveAssignments
+            .GroupBy(assignment => (assignment.ExerciseId, assignment.ScheduledDate))
+            .ToDictionary(group => group.Key, group => group.First());
 
         var inactiveAssignments = await _dbContext.UserExercises
             .IgnoreQueryFilters()
@@ -288,8 +286,9 @@ public class DoctorPatientService : IDoctorPatientService
                 && distinctScheduledDates.Contains(assignment.ScheduledDate))
             .ToListAsync(cancellationToken);
 
-        var inactiveByKey = inactiveAssignments.ToDictionary(
-            assignment => (assignment.ExerciseId, assignment.ScheduledDate));
+        var inactiveByKey = inactiveAssignments
+            .GroupBy(assignment => (assignment.ExerciseId, assignment.ScheduledDate))
+            .ToDictionary(group => group.Key, group => group.First());
         var assignedAt = DateTime.UtcNow;
         var assignedCount = 0;
 
@@ -300,12 +299,14 @@ public class DoctorPatientService : IDoctorPatientService
                 var dosage = itemsByExerciseId[exerciseId];
                 var key = (exerciseId, scheduledDate);
 
-                if (inactiveByKey.TryGetValue(key, out var inactiveAssignment))
+                if (existingByKey.TryGetValue(key, out var existingAssignment))
                 {
-                    inactiveAssignment.IsActive = true;
-                    inactiveAssignment.IsEnabled = true;
-                    inactiveAssignment.AssignedAt = assignedAt;
-                    ApplyDosage(inactiveAssignment, dosage);
+                    ApplyDosage(existingAssignment, dosage, assignedAt);
+                }
+                else if (inactiveByKey.TryGetValue(key, out var inactiveAssignment))
+                {
+                    inactiveAssignment.Reactivate(assignedAt);
+                    ApplyDosage(inactiveAssignment, dosage, assignedAt);
                 }
                 else
                 {
@@ -320,7 +321,7 @@ public class DoctorPatientService : IDoctorPatientService
                         IsActive = true,
                         IsEnabled = true,
                     };
-                    ApplyDosage(assignment, dosage);
+                    ApplyDosage(assignment, dosage, assignedAt);
                     _dbContext.UserExercises.Add(assignment);
                 }
 
@@ -333,15 +334,20 @@ public class DoctorPatientService : IDoctorPatientService
         return AuthResult<AssignPatientExercisesResultDto>.Success(new AssignPatientExercisesResultDto(assignedCount));
     }
 
-    private static void ApplyDosage(UserExercise assignment, AssignPatientExerciseItem dosage)
+    private static void ApplyDosage(
+        UserExercise assignment,
+        AssignPatientExerciseItem dosage,
+        DateTime assignedAt)
     {
-        assignment.Sets = dosage.Sets;
-        assignment.Reps = dosage.Reps;
-        assignment.HoldSeconds = dosage.HoldSeconds;
-        assignment.RestSeconds = dosage.RestSeconds;
-        assignment.Side = dosage.Side;
-        assignment.ClinicianNote = dosage.ClinicianNote;
-        assignment.PatientCue = dosage.PatientCue;
+        assignment.ApplyLatestDosage(
+            assignedAt,
+            dosage.Sets,
+            dosage.Reps,
+            dosage.HoldSeconds,
+            dosage.RestSeconds,
+            dosage.Side,
+            dosage.ClinicianNote,
+            dosage.PatientCue);
     }
 
     public async Task<AuthResult<PatientExerciseHistoryResponse>> GetExerciseHistoryAsync(
@@ -709,11 +715,6 @@ public class DoctorPatientService : IDoctorPatientService
             itemsByExerciseId,
             cancellationToken);
 
-        if (assignedCount < 0)
-        {
-            return AuthResult<CreateExerciseProgramResultDto>.Failure([DuplicateExerciseAssignmentError]);
-        }
-
         await _dbContext.SaveChangesAsync(cancellationToken);
         return AuthResult<CreateExerciseProgramResultDto>.Success(
             new CreateExerciseProgramResultDto(programId, assignedCount));
@@ -835,11 +836,6 @@ public class DoctorPatientService : IDoctorPatientService
             validExerciseIds,
             itemsByExerciseId,
             cancellationToken);
-
-        if (assignedCount < 0)
-        {
-            return AuthResult<CreateExerciseProgramResultDto>.Failure([DuplicateExerciseAssignmentError]);
-        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return AuthResult<CreateExerciseProgramResultDto>.Success(
@@ -1107,7 +1103,11 @@ public class DoctorPatientService : IDoctorPatientService
             .ToListAsync(cancellationToken);
     }
 
-    /// <returns>Assigned count, or -1 when blocked by unrelated duplicate active assignments.</returns>
+    /// <summary>
+    /// Materializes program dates into the patient schedule by merging:
+    /// same exercise+date updates dosage (latest wins); different exercises coexist.
+    /// Completed leftovers are retired so a fresh row is created.
+    /// </summary>
     private async Task<int> MaterializeProgramAssignmentsAsync(
         Guid doctorId,
         Guid patientId,
@@ -1132,34 +1132,6 @@ public class DoctorPatientService : IDoctorPatientService
                 && scheduleDates.Contains(assignment.ScheduledDate))
             .ToListAsync(cancellationToken);
 
-        var conflicting = existingActive
-            .Where(assignment => assignment.ProgramId != programId)
-            .ToList();
-        if (conflicting.Count > 0)
-        {
-            var conflictingProgramIds = conflicting
-                .Where(assignment => assignment.ProgramId.HasValue)
-                .Select(assignment => assignment.ProgramId!.Value)
-                .Distinct()
-                .ToList();
-
-            // The soft-delete query filter hides disabled programs, so this only
-            // returns programs that are still enabled.
-            var enabledProgramIds = conflictingProgramIds.Count == 0
-                ? []
-                : (await _dbContext.ExercisePrograms
-                    .Where(program => conflictingProgramIds.Contains(program.ProgramId))
-                    .Select(program => program.ProgramId)
-                    .ToListAsync(cancellationToken))
-                    .ToHashSet();
-
-            if (conflicting.Any(assignment =>
-                    assignment.ProgramId.HasValue && enabledProgramIds.Contains(assignment.ProgramId.Value)))
-            {
-                return -1;
-            }
-        }
-
         var inactiveAssignments = await _dbContext.UserExercises
             .IgnoreQueryFilters()
             .Where(assignment =>
@@ -1171,7 +1143,7 @@ public class DoctorPatientService : IDoctorPatientService
             .ToListAsync(cancellationToken);
 
         // Never reuse an assignment that already has a completion for its scheduled
-        // date — otherwise a new program would inherit "done" from a deleted plan.
+        // date — otherwise a new program would inherit "done" from a prior plan.
         var candidateIds = existingActive
             .Concat(inactiveAssignments)
             .Select(assignment => assignment.UserExerciseId)
@@ -1195,24 +1167,15 @@ public class DoctorPatientService : IDoctorPatientService
                 .Select(completion => completion.UserExerciseId)
                 .ToHashSet();
 
-        // Incomplete leftovers from deleted programs / one-off assigns are adopted.
-        // Completed leftovers are retired so a fresh UserExercise is created.
-        foreach (var orphan in conflicting)
+        foreach (var completed in existingActive.Where(a => completedAssignmentIds.Contains(a.UserExerciseId)))
         {
-            if (completedAssignmentIds.Contains(orphan.UserExerciseId))
-            {
-                orphan.IsActive = false;
-                orphan.IsEnabled = false;
-                continue;
-            }
-
-            orphan.ProgramId = programId;
-            ApplyDosage(orphan, itemsByExerciseId[orphan.ExerciseId]);
+            completed.Retire();
         }
 
         var existingByKey = existingActive
             .Where(assignment => !completedAssignmentIds.Contains(assignment.UserExerciseId))
-            .ToDictionary(a => (a.ExerciseId, a.ScheduledDate));
+            .GroupBy(assignment => (assignment.ExerciseId, assignment.ScheduledDate))
+            .ToDictionary(group => group.Key, group => group.First());
 
         var inactiveByKey = inactiveAssignments
             .Where(assignment => !completedAssignmentIds.Contains(assignment.UserExerciseId))
@@ -1227,19 +1190,20 @@ public class DoctorPatientService : IDoctorPatientService
             foreach (var exerciseId in validExerciseIds)
             {
                 var key = (exerciseId, scheduledDate);
-                if (existingByKey.ContainsKey(key))
+                var dosage = itemsByExerciseId[exerciseId];
+
+                if (existingByKey.TryGetValue(key, out var existingAssignment))
                 {
+                    // Merge into the consolidated day schedule (latest dosage wins).
+                    existingAssignment.ProgramId = programId;
+                    ApplyDosage(existingAssignment, dosage, assignedAt);
                     continue;
                 }
 
-                var dosage = itemsByExerciseId[exerciseId];
                 if (inactiveByKey.TryGetValue(key, out var inactiveAssignment))
                 {
-                    inactiveAssignment.IsActive = true;
-                    inactiveAssignment.IsEnabled = true;
-                    inactiveAssignment.AssignedAt = assignedAt;
-                    inactiveAssignment.ProgramId = programId;
-                    ApplyDosage(inactiveAssignment, dosage);
+                    inactiveAssignment.Reactivate(assignedAt, programId);
+                    ApplyDosage(inactiveAssignment, dosage, assignedAt);
                 }
                 else
                 {
@@ -1255,7 +1219,7 @@ public class DoctorPatientService : IDoctorPatientService
                         IsActive = true,
                         IsEnabled = true,
                     };
-                    ApplyDosage(assignment, dosage);
+                    ApplyDosage(assignment, dosage, assignedAt);
                     _dbContext.UserExercises.Add(assignment);
                 }
 

@@ -225,13 +225,18 @@ public class AssignmentServiceCreateTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenDuplicateActiveAssignmentExists_ReturnsFailure()
+    public async Task CreateAsync_WhenDuplicateActiveAssignmentExists_MergesExistingAssignment()
     {
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
         var exercise = ExerciseBuilder.Create();
-        var existingAssignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId);
+        var existingAssignment = AssignmentBuilder.Create(
+            doctor.Id,
+            patient.Id,
+            exercise.ExerciseId,
+            assignedAt: DateTime.UtcNow.AddMinutes(-5));
+        var originalAssignedAt = existingAssignment.AssignedAt;
         var request = new CreateAssignmentRequest
         {
             PatientId = patient.Id,
@@ -252,9 +257,10 @@ public class AssignmentServiceCreateTests
         var result = await sut.CreateAsync(doctor.Id, request);
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be("This exercise is already actively assigned to the patient.");
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Id.Should().Be(existingAssignment.UserExerciseId);
+        dbContext.Object.UserExercises.Should().ContainSingle();
+        dbContext.Object.UserExercises.Single().AssignedAt.Should().BeAfter(originalAssignedAt);
     }
 
     [Fact]

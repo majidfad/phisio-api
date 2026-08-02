@@ -38,4 +38,45 @@ public class UserExercise : BaseEntity
     public Exercise Exercise { get; set; } = null!;
 
     public ExerciseProgram? Program { get; set; }
+
+    /// <summary>
+    /// Applies the latest assigned dosage in place so the same exercise/day
+    /// stays a single consolidated schedule row (no duplicates).
+    /// </summary>
+    public void ApplyLatestDosage(
+        DateTime assignedAt,
+        int? sets,
+        string? reps,
+        int? holdSeconds,
+        int? restSeconds,
+        ExerciseSide side,
+        string? clinicianNote,
+        string? patientCue)
+    {
+        AssignedAt = assignedAt;
+        Sets = sets;
+        Reps = reps;
+        HoldSeconds = holdSeconds;
+        RestSeconds = restSeconds;
+        Side = side;
+        ClinicianNote = clinicianNote;
+        PatientCue = patientCue;
+    }
+
+    public void Reactivate(DateTime assignedAt, Guid? programId = null)
+    {
+        IsActive = true;
+        IsEnabled = true;
+        AssignedAt = assignedAt;
+        if (programId.HasValue)
+        {
+            ProgramId = programId;
+        }
+    }
+
+    public void Retire()
+    {
+        IsActive = false;
+        IsEnabled = false;
+    }
 }

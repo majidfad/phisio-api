@@ -17,8 +17,11 @@ public class DoctorPatientServiceCreateProgramTests
 
     private const int EveryDayMask = 0b1111111;
 
-    private static AssignPatientExerciseItem Item(Guid exerciseId) =>
-        new(exerciseId, Sets: 3, Reps: "10", HoldSeconds: null, RestSeconds: null,
+    private static AssignPatientExerciseItem Item(
+        Guid exerciseId,
+        int? sets = 3,
+        string? reps = "10") =>
+        new(exerciseId, Sets: sets, Reps: reps, HoldSeconds: null, RestSeconds: null,
             Side: ExerciseSide.NotApplicable, ClinicianNote: null, PatientCue: null);
 
     private static CreateExerciseProgramRequest DailyRequest(
@@ -29,7 +32,17 @@ public class DoctorPatientServiceCreateProgramTests
             ExerciseProgramCadenceType.DaysOfWeek,
             EveryDayMask,
             IntervalDays: null,
-            exerciseIds.Select(Item).ToList());
+            exerciseIds.Select(id => Item(id)).ToList());
+
+    private static CreateExerciseProgramRequest DailyRequestWithItems(
+        DateOnly startDate, DateOnly endDate, params AssignPatientExerciseItem[] items) =>
+        new(
+            startDate,
+            endDate,
+            ExerciseProgramCadenceType.DaysOfWeek,
+            EveryDayMask,
+            IntervalDays: null,
+            items.ToList());
 
     private static ExerciseProgram Program(
         Guid doctorId, Guid patientId, bool isEnabled) =>
@@ -216,38 +229,68 @@ public class DoctorPatientServiceCreateProgramTests
     }
 
     [Fact]
-    public async Task CreateProgramAsync_WhenAnotherEnabledProgramCoversSameDate_ReturnsDuplicateFailure()
+    public async Task CreateProgramAsync_WhenAnotherEnabledProgramCoversSameDate_MergesDosageIntoExistingSchedule()
     {
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
-        var exercise = ExerciseBuilder.Create(createdByDoctorId: doctor.Id);
+        var neckStretch = ExerciseBuilder.Create(title: "Neck Stretch", createdByDoctorId: doctor.Id);
+        var shoulderRotation = ExerciseBuilder.Create(
+            title: "Shoulder Rotation", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
+        var backExtension = ExerciseBuilder.Create(
+            title: "Back Extension", id: Guid.NewGuid(), createdByDoctorId: doctor.Id);
         var activeProgram = Program(doctor.Id, patient.Id, isEnabled: true);
 
-        var existingAssignment = AssignmentBuilder.Create(
-            doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: Today);
-        existingAssignment.ProgramId = activeProgram.ProgramId;
+        var existingNeck = AssignmentBuilder.Create(
+            doctor.Id, patient.Id, neckStretch.ExerciseId, scheduledDate: Today);
+        existingNeck.ProgramId = activeProgram.ProgramId;
+        existingNeck.Reps = "10";
+
+        var existingShoulder = AssignmentBuilder.Create(
+            doctor.Id, patient.Id, shoulderRotation.ExerciseId, scheduledDate: Today);
+        existingShoulder.ProgramId = activeProgram.ProgramId;
+        existingShoulder.Reps = "15";
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
-            exercises: [exercise],
+            exercises: [neckStretch, shoulderRotation, backExtension],
             doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id)],
             exercisePrograms: [activeProgram],
-            userExercises: [existingAssignment]);
+            userExercises: [existingNeck, existingShoulder]);
 
         var sut = new DoctorPatientService(dbContext.Object);
 
-        // Act
+        // Act — new program overlaps Monday: update Neck Stretch reps + add Back Extension
         var result = await sut.CreateProgramAsync(
-            doctor.Id, patient.Id, DailyRequest(Today, Tomorrow, exercise.ExerciseId));
+            doctor.Id,
+            patient.Id,
+            DailyRequestWithItems(
+                Today,
+                Today,
+                Item(neckStretch.ExerciseId, reps: "20"),
+                Item(backExtension.ExerciseId, reps: "12")));
 
         // Assert
-        result.Succeeded.Should().BeFalse();
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be(DoctorPatientErrors.DuplicateAssignment);
-        dbContext.Object.UserExercises.Should().ContainSingle();
+        result.Succeeded.Should().BeTrue();
 
-        var untouched = dbContext.Object.UserExercises.Single();
-        untouched.ProgramId.Should().Be(activeProgram.ProgramId);
+        var schedule = dbContext.Object.UserExercises
+            .Where(ue => ue.IsActive && ue.IsEnabled && ue.ScheduledDate == Today)
+            .ToList();
+        schedule.Should().HaveCount(3);
+
+        var mergedNeck = schedule.Single(ue => ue.ExerciseId == neckStretch.ExerciseId);
+        mergedNeck.UserExerciseId.Should().Be(existingNeck.UserExerciseId);
+        mergedNeck.Reps.Should().Be("20");
+        mergedNeck.ProgramId.Should().Be(result.Value!.ProgramId);
+
+        schedule.Should().Contain(ue =>
+            ue.ExerciseId == shoulderRotation.ExerciseId
+            && ue.Reps == "15"
+            && ue.ProgramId == activeProgram.ProgramId);
+
+        schedule.Should().Contain(ue =>
+            ue.ExerciseId == backExtension.ExerciseId
+            && ue.Reps == "12"
+            && ue.ProgramId == result.Value.ProgramId);
     }
 }
