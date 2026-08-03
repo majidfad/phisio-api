@@ -101,7 +101,8 @@ public class AdminPatientsControllerCreatePatientTests
         var request = new CreateAdminPatientDto
         {
             Name = "Alice Patient",
-            PhoneNumber = "+15551111111"
+            PhoneNumber = "+15551111111",
+            GeneratePassword = true,
         };
 
         var createdPatient = new PatientDto(
@@ -111,10 +112,11 @@ public class AdminPatientsControllerCreatePatientTests
             DateTime.UtcNow,
             null,
             DateTime.UtcNow);
+        var createdResponse = new CreateAdminPatientResponse(createdPatient, "PhisioTemp!1");
 
         var adminPatientService = new Mock<IAdminPatientService>();
         adminPatientService.Setup(service => service.CreateAsync(request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(AuthResult<PatientDto>.Success(createdPatient));
+            .ReturnsAsync(AuthResult<CreateAdminPatientResponse>.Success(createdResponse));
 
         var controller = AdminPatientsControllerTestHelper.CreateController(adminPatientService);
 
@@ -124,7 +126,7 @@ public class AdminPatientsControllerCreatePatientTests
         // Assert
         var createdResult = result.Should().BeOfType<CreatedAtActionResult>().Subject;
         createdResult.StatusCode.Should().Be(StatusCodes.Status201Created);
-        createdResult.Value.Should().BeEquivalentTo(createdPatient);
+        createdResult.Value.Should().BeEquivalentTo(createdResponse);
     }
 
     [Fact]
@@ -134,12 +136,13 @@ public class AdminPatientsControllerCreatePatientTests
         var request = new CreateAdminPatientDto
         {
             Name = "Alice Patient",
-            PhoneNumber = "+15551111111"
+            PhoneNumber = "+15551111111",
+            GeneratePassword = true,
         };
 
         var adminPatientService = new Mock<IAdminPatientService>();
         adminPatientService.Setup(service => service.CreateAsync(request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(AuthResult<PatientDto>.Failure(["Phone number is already registered."]));
+            .ReturnsAsync(AuthResult<CreateAdminPatientResponse>.Failure(["Phone number is already registered."]));
 
         var controller = AdminPatientsControllerTestHelper.CreateController(adminPatientService);
 

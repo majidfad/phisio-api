@@ -11,7 +11,7 @@ public interface IAdminPatientService
 
     Task<AuthResult<PatientDto>> GetByIdAsync(Guid patientId, CancellationToken cancellationToken = default);
 
-    Task<AuthResult<PatientDto>> CreateAsync(
+    Task<AuthResult<CreateAdminPatientResponse>> CreateAsync(
         CreateAdminPatientDto request,
         CancellationToken cancellationToken = default);
 
@@ -23,4 +23,9 @@ public interface IAdminPatientService
     Task<AuthResult<bool>> DeleteAsync(Guid patientId, CancellationToken cancellationToken = default);
 
     Task<AuthResult<bool>> ActivateAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    Task<AuthResult<AdminSetPasswordResponse>> SetPasswordAsync(
+        Guid patientId,
+        AdminSetPasswordRequest request,
+        CancellationToken cancellationToken = default);
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Phisio.Application.Admin;
 using Phisio.Application.Admin.Patients;
 using Phisio.Application.Common;
 using Phisio.Application.Patients;
@@ -79,7 +80,7 @@ public class AdminPatientService : IAdminPatientService
                 doctorNames.GetValueOrDefault(patientId, [])));
     }
 
-    public async Task<AuthResult<PatientDto>> CreateAsync(
+    public async Task<AuthResult<CreateAdminPatientResponse>> CreateAsync(
         CreateAdminPatientDto request,
         CancellationToken cancellationToken = default)
     {
@@ -93,8 +94,12 @@ public class AdminPatientService : IAdminPatientService
 
         if (validationError is not null)
         {
-            return AuthResult<PatientDto>.Failure([validationError]);
+            return AuthResult<CreateAdminPatientResponse>.Failure([validationError]);
         }
+
+        var (password, wasGenerated) = AdminPasswordResolver.Resolve(
+            request.Password,
+            request.GeneratePassword);
 
         var patient = new ApplicationUser
         {
@@ -106,11 +111,11 @@ public class AdminPatientService : IAdminPatientService
 
         UserCredentials.Apply(patient, request.PhoneNumber, request.Email);
 
-        var createResult = await _userManager.CreateAsync(patient, TemporaryPasswordGenerator.Generate());
+        var createResult = await _userManager.CreateAsync(patient, password);
 
         if (!createResult.Succeeded)
         {
-            return AuthResult<PatientDto>.Failure(
+            return AuthResult<CreateAdminPatientResponse>.Failure(
                 createResult.Errors.Select(error => error.Description));
         }
 
@@ -119,11 +124,14 @@ public class AdminPatientService : IAdminPatientService
         if (!addRoleResult.Succeeded)
         {
             await _userManager.DeleteAsync(patient);
-            return AuthResult<PatientDto>.Failure(
+            return AuthResult<CreateAdminPatientResponse>.Failure(
                 addRoleResult.Errors.Select(error => error.Description));
         }
 
-        return AuthResult<PatientDto>.Success(MapToDto(patient, firstAssignedAt: null, doctorNames: []));
+        return AuthResult<CreateAdminPatientResponse>.Success(
+            new CreateAdminPatientResponse(
+                MapToDto(patient, firstAssignedAt: null, doctorNames: []),
+                wasGenerated ? password : null));
     }
 
     public async Task<AuthResult<PatientDto>> UpdateAsync(
@@ -237,6 +245,39 @@ public class AdminPatientService : IAdminPatientService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return AuthResult<bool>.Success(true);
+    }
+
+    public async Task<AuthResult<AdminSetPasswordResponse>> SetPasswordAsync(
+        Guid patientId,
+        AdminSetPasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var patient = await _userManager.FindByIdAsync(patientId.ToString());
+
+        if (patient is null || patient.Role != UserRole.Patient)
+        {
+            return AuthResult<AdminSetPasswordResponse>.Failure(["Patient not found."]);
+        }
+
+        var (password, wasGenerated) = AdminPasswordResolver.Resolve(
+            request.Password,
+            request.GeneratePassword);
+
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(patient);
+        var resetResult = await _userManager.ResetPasswordAsync(patient, resetToken, password);
+
+        if (!resetResult.Succeeded)
+        {
+            return AuthResult<AdminSetPasswordResponse>.Failure(
+                resetResult.Errors.Select(error => error.Description));
+        }
+
+        return AuthResult<AdminSetPasswordResponse>.Success(
+            new AdminSetPasswordResponse(
+                "Password updated successfully.",
+                wasGenerated ? password : null));
     }
 
     private async Task<ApplicationUser?> FindPatientAsync(

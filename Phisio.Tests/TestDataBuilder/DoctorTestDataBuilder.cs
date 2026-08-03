@@ -39,6 +39,7 @@ internal static class DoctorTestDataBuilder
             Specialty = specialty,
             MedicalLicenseNumber = medicalLicenseNumber,
             ClinicAddress = clinicAddress,
+            GeneratePassword = true,
         };
 
     public static Phisio.Application.Admin.Doctors.UpdateAdminDoctorDto UpdateDto(

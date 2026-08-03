@@ -150,15 +150,16 @@ public class AdminDoctorServiceCreateTests
         // Assert
         result.Succeeded.Should().BeTrue();
         result.Value.Should().NotBeNull();
-        result.Value!.Name.Should().Be(request.Name);
-        result.Value.PhoneNumber.Should().Be(request.PhoneNumber);
-        result.Value.Specialty.Should().Be(request.Specialty);
-        result.Value.MedicalLicenseNumber.Should().Be(request.MedicalLicenseNumber);
-        result.Value.ClinicAddress.Should().Be(request.ClinicAddress);
+        result.Value!.Doctor.Name.Should().Be(request.Name);
+        result.Value.Doctor.PhoneNumber.Should().Be(request.PhoneNumber);
+        result.Value.Doctor.Specialty.Should().Be(request.Specialty);
+        result.Value.Doctor.MedicalLicenseNumber.Should().Be(request.MedicalLicenseNumber);
+        result.Value.Doctor.ClinicAddress.Should().Be(request.ClinicAddress);
+        result.Value.GeneratedPassword.Should().NotBeNullOrWhiteSpace();
 
         var savedProfile = await dbContext.DoctorProfiles.SingleAsync();
         savedProfile.Specialty.Should().Be(request.Specialty);
-        savedProfile.DoctorId.Should().Be(result.Value.Id);
+        savedProfile.DoctorId.Should().Be(result.Value.Doctor.Id);
     }
 
     [Fact]

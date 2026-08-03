@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Phisio.Application.Admin;
 using Phisio.Application.Admin.Patients;
 using Phisio.Application.Common;
 using Phisio.Application.Patients;
@@ -48,7 +49,7 @@ public class AdminPatientsController : ControllerBase
     }
 
     [HttpPost]
-    [ProducesResponseType(typeof(PatientDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(CreateAdminPatientResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -63,7 +64,10 @@ public class AdminPatientsController : ControllerBase
             return BadRequest(new { errors = result.Errors });
         }
 
-        return CreatedAtAction(nameof(GetPatient), new { id = result.Value!.Id }, result.Value);
+        return CreatedAtAction(
+            nameof(GetPatient),
+            new { id = result.Value!.Patient.Id },
+            result.Value);
     }
 
     [HttpPut("{id:guid}")]
@@ -129,5 +133,31 @@ public class AdminPatientsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    [HttpPut("{id:guid}/password")]
+    [ProducesResponseType(typeof(AdminSetPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetPatientPassword(
+        Guid id,
+        [FromBody] AdminSetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _adminPatientService.SetPasswordAsync(id, request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Contains("Patient not found."))
+            {
+                return NotFound(new { errors = result.Errors });
+            }
+
+            return BadRequest(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
     }
 }

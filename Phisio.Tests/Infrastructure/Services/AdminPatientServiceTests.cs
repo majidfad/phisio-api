@@ -187,7 +187,8 @@ public class AdminPatientServiceCreateTests
         {
             Name = "Alice Patient",
             PhoneNumber = "+15551111111",
-            Email = "alice@example.com"
+            Email = "alice@example.com",
+            GeneratePassword = true,
         };
 
         var userManager = IdentityMockFactory.CreateUserManager();
@@ -206,9 +207,10 @@ public class AdminPatientServiceCreateTests
         // Assert
         result.Succeeded.Should().BeTrue();
         result.Value.Should().NotBeNull();
-        result.Value!.Name.Should().Be(request.Name);
-        result.Value.PhoneNumber.Should().Be(request.PhoneNumber);
-        result.Value.Email.Should().Be(request.Email);
+        result.Value!.Patient.Name.Should().Be(request.Name);
+        result.Value.Patient.PhoneNumber.Should().Be(request.PhoneNumber);
+        result.Value.Patient.Email.Should().Be(request.Email);
+        result.Value.GeneratedPassword.Should().NotBeNullOrWhiteSpace();
 
         userManager.Verify(
             manager => manager.CreateAsync(
@@ -231,7 +233,8 @@ public class AdminPatientServiceCreateTests
         var request = new CreateAdminPatientDto
         {
             Name = "Alice Patient",
-            PhoneNumber = "+15551111111"
+            PhoneNumber = "+15551111111",
+            GeneratePassword = true,
         };
         var existingUser = ApplicationUserBuilder.Patient(phoneNumber: request.PhoneNumber);
 

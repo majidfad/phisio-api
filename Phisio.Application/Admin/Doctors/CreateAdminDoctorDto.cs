@@ -13,4 +13,10 @@ public sealed class CreateAdminDoctorDto
     public string MedicalLicenseNumber { get; set; } = string.Empty;
 
     public string ClinicAddress { get; set; } = string.Empty;
+
+    public string? Password { get; set; }
+
+    public string? ConfirmPassword { get; set; }
+
+    public bool GeneratePassword { get; set; }
 }

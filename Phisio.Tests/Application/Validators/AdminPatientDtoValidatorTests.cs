@@ -16,7 +16,8 @@ public class CreateAdminPatientDtoValidatorTests
         {
             Name = "Alice Patient",
             PhoneNumber = "+15551111111",
-            Email = "alice@example.com"
+            Email = "alice@example.com",
+            GeneratePassword = true,
         };
 
         // Act
@@ -33,7 +34,8 @@ public class CreateAdminPatientDtoValidatorTests
         var request = new CreateAdminPatientDto
         {
             Name = "Alice Patient",
-            PhoneNumber = "+15551111111"
+            PhoneNumber = "+15551111111",
+            GeneratePassword = true,
         };
 
         // Act

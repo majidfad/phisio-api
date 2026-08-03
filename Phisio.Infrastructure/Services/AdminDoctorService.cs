@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Phisio.Application.Admin;
 using Phisio.Application.Admin.Doctors;
 using Phisio.Application.Common;
 using Phisio.Application.Doctors;
@@ -72,7 +73,7 @@ public class AdminDoctorService : IAdminDoctorService
         return AuthResult<DoctorDto>.Success(MapToDto(doctor, profile));
     }
 
-    public async Task<AuthResult<DoctorDto>> CreateAsync(
+    public async Task<AuthResult<CreateAdminDoctorResponse>> CreateAsync(
         CreateAdminDoctorDto request,
         CancellationToken cancellationToken = default)
     {
@@ -88,8 +89,12 @@ public class AdminDoctorService : IAdminDoctorService
 
         if (validationError is not null)
         {
-            return AuthResult<DoctorDto>.Failure([validationError]);
+            return AuthResult<CreateAdminDoctorResponse>.Failure([validationError]);
         }
+
+        var (password, wasGenerated) = AdminPasswordResolver.Resolve(
+            request.Password,
+            request.GeneratePassword);
 
         var doctor = new ApplicationUser
         {
@@ -101,11 +106,11 @@ public class AdminDoctorService : IAdminDoctorService
 
         UserCredentials.Apply(doctor, request.PhoneNumber, request.Email);
 
-        var createResult = await _userManager.CreateAsync(doctor, TemporaryPasswordGenerator.Generate());
+        var createResult = await _userManager.CreateAsync(doctor, password);
 
         if (!createResult.Succeeded)
         {
-            return AuthResult<DoctorDto>.Failure(
+            return AuthResult<CreateAdminDoctorResponse>.Failure(
                 createResult.Errors.Select(error => error.Description));
         }
 
@@ -114,7 +119,7 @@ public class AdminDoctorService : IAdminDoctorService
         if (!addRoleResult.Succeeded)
         {
             await _userManager.DeleteAsync(doctor);
-            return AuthResult<DoctorDto>.Failure(
+            return AuthResult<CreateAdminDoctorResponse>.Failure(
                 addRoleResult.Errors.Select(error => error.Description));
         }
 
@@ -122,7 +127,10 @@ public class AdminDoctorService : IAdminDoctorService
         _dbContext.DoctorProfiles.Add(profile);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return AuthResult<DoctorDto>.Success(MapToDto(doctor, profile));
+        return AuthResult<CreateAdminDoctorResponse>.Success(
+            new CreateAdminDoctorResponse(
+                MapToDto(doctor, profile),
+                wasGenerated ? password : null));
     }
 
     public async Task<AuthResult<DoctorDto>> UpdateAsync(
@@ -308,6 +316,39 @@ public class AdminDoctorService : IAdminDoctorService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return AuthResult<bool>.Success(true);
+    }
+
+    public async Task<AuthResult<AdminSetPasswordResponse>> SetPasswordAsync(
+        Guid doctorId,
+        AdminSetPasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var doctor = await _userManager.FindByIdAsync(doctorId.ToString());
+
+        if (doctor is null || doctor.Role != UserRole.Doctor)
+        {
+            return AuthResult<AdminSetPasswordResponse>.Failure(["Doctor not found."]);
+        }
+
+        var (password, wasGenerated) = AdminPasswordResolver.Resolve(
+            request.Password,
+            request.GeneratePassword);
+
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(doctor);
+        var resetResult = await _userManager.ResetPasswordAsync(doctor, resetToken, password);
+
+        if (!resetResult.Succeeded)
+        {
+            return AuthResult<AdminSetPasswordResponse>.Failure(
+                resetResult.Errors.Select(error => error.Description));
+        }
+
+        return AuthResult<AdminSetPasswordResponse>.Success(
+            new AdminSetPasswordResponse(
+                "Password updated successfully.",
+                wasGenerated ? password : null));
     }
 
     private async Task<ApplicationUser?> FindDoctorAsync(

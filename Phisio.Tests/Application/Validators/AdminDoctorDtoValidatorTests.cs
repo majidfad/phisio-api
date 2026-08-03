@@ -19,7 +19,8 @@ public class CreateAdminDoctorDtoValidatorTests
             Email = "alice@example.com",
             Specialty = "Orthopedics",
             MedicalLicenseNumber = "MD-11111",
-            ClinicAddress = "123 Clinic St"
+            ClinicAddress = "123 Clinic St",
+            GeneratePassword = true,
         };
 
         // Act
