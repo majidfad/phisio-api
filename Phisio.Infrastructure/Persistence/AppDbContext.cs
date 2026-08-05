@@ -38,6 +38,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+
     public override int SaveChanges()
     {
         ApplyAuditableTimestamps();

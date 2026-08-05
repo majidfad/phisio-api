@@ -16,10 +16,14 @@ public class NotificationService : INotificationService
     };
 
     private readonly AppDbContext _dbContext;
+    private readonly IWebPushSender _webPushSender;
 
-    public NotificationService(AppDbContext dbContext)
+    public NotificationService(
+        AppDbContext dbContext,
+        IWebPushSender? webPushSender = null)
     {
         _dbContext = dbContext;
+        _webPushSender = webPushSender ?? NullWebPushSender.Instance;
     }
 
     public async Task CreateAsync(
@@ -28,13 +32,15 @@ public class NotificationService : INotificationService
     {
         _dbContext.Notifications.Add(ToEntity(request));
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await PushAsync(request, cancellationToken);
     }
 
     public async Task CreateManyAsync(
         IEnumerable<CreateNotificationRequest> requests,
         CancellationToken cancellationToken = default)
     {
-        var entities = requests.Select(ToEntity).ToList();
+        var list = requests.ToList();
+        var entities = list.Select(ToEntity).ToList();
         if (entities.Count == 0)
         {
             return;
@@ -42,6 +48,11 @@ public class NotificationService : INotificationService
 
         _dbContext.Notifications.AddRange(entities);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var request in list)
+        {
+            await PushAsync(request, cancellationToken);
+        }
     }
 
     public Task NotifyAsync(
@@ -164,6 +175,60 @@ public class NotificationService : INotificationService
         return AuthResult<int>.Success(unread.Count);
     }
 
+    private async Task PushAsync(
+        CreateNotificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            object? data = null;
+            if (!string.IsNullOrWhiteSpace(request.Data))
+            {
+                try
+                {
+                    data = JsonSerializer.Deserialize<JsonElement>(request.Data);
+                }
+                catch (JsonException)
+                {
+                    data = new { raw = request.Data };
+                }
+            }
+
+            await _webPushSender.SendToUserAsync(
+                request.UserId,
+                request.Title,
+                request.Body,
+                new
+                {
+                    type = request.Type.ToString(),
+                    url = GetDeepLink(request.Type),
+                    payload = data,
+                },
+                cancellationToken);
+        }
+        catch
+        {
+            // Push failures must never break in-app notification creation.
+        }
+    }
+
+    private static string GetDeepLink(NotificationType type) =>
+        type switch
+        {
+            NotificationType.ExercisesAssigned
+                or NotificationType.ProgramCreated
+                or NotificationType.ExerciseReminder => "/patient/exercises",
+            NotificationType.PatientLinkRequested
+                or NotificationType.ExercisesCompleted
+                or NotificationType.DailyFeedbackReceived => "/doctor/patients",
+            NotificationType.DoctorPendingActivation => "/admin/doctors",
+            NotificationType.LinkApproved
+                or NotificationType.LinkRejected
+                or NotificationType.PatientRemoved => "/patient/doctors",
+            NotificationType.DoctorActivated => "/doctor",
+            _ => "/",
+        };
+
     private static Notification ToEntity(CreateNotificationRequest request) =>
         new()
         {
@@ -180,4 +245,19 @@ public class NotificationService : INotificationService
 
     private static string? SerializeData(object? data) =>
         data is null ? null : JsonSerializer.Serialize(data, JsonOptions);
+}
+
+internal sealed class NullWebPushSender : IWebPushSender
+{
+    public static NullWebPushSender Instance { get; } = new();
+
+    public string? PublicKey => null;
+
+    public Task SendToUserAsync(
+        Guid userId,
+        string title,
+        string body,
+        object? data = null,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

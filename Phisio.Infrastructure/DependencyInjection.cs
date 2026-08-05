@@ -27,6 +27,7 @@ using Phisio.Infrastructure.Background;
 using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 using Phisio.Infrastructure.Persistence.Seeding;
+using Phisio.Infrastructure.Push;
 using Phisio.Infrastructure.Services;
 
 namespace Phisio.Infrastructure;
@@ -42,6 +43,7 @@ public static class DependencyInjection
 
         services.Configure<SeedAdminOptions>(configuration.GetSection(SeedAdminOptions.SectionName));
         services.Configure<ExerciseUploadOptions>(configuration.GetSection(ExerciseUploadOptions.SectionName));
+        services.Configure<VapidSettings>(configuration.GetSection(VapidSettings.SectionName));
 
         var maxUploadBytes = configuration.GetValue<long?>(
                 $"{ExerciseUploadOptions.SectionName}:MaxFileSizeBytes")
@@ -96,6 +98,8 @@ public static class DependencyInjection
         services.AddScoped<IPatientDailyFeedbackService, PatientDailyFeedbackService>();
         services.AddScoped<IPatientSettingsService, PatientSettingsService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
+        services.AddScoped<IWebPushSender, WebPushSender>();
         services.AddHostedService<ExerciseReminderBackgroundService>();
         services.AddScoped<IdentitySeeder>();
 
