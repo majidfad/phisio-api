@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
+using Phisio.Application.Notifications;
 using Phisio.Application.PatientDailyFeedback;
 using Phisio.Domain.Entities;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Persistence;
 
 namespace Phisio.Infrastructure.Services;
@@ -9,10 +11,14 @@ namespace Phisio.Infrastructure.Services;
 public class PatientDailyFeedbackService : IPatientDailyFeedbackService
 {
     private readonly AppDbContext _dbContext;
+    private readonly INotificationService _notifications;
 
-    public PatientDailyFeedbackService(AppDbContext dbContext)
+    public PatientDailyFeedbackService(
+        AppDbContext dbContext,
+        INotificationService? notifications = null)
     {
         _dbContext = dbContext;
+        _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
     public async Task<AuthResult<SubmitDailyFeedbackResponse>> SubmitAsync(
@@ -51,6 +57,12 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
+            await NotifyDoctorOfFeedbackAsync(
+                patientId,
+                doctorId.Value,
+                wasUpdated: true,
+                cancellationToken);
+
             return AuthResult<SubmitDailyFeedbackResponse>.Success(
                 new SubmitDailyFeedbackResponse(
                     existingFeedback.DailyPatientFeedbackId,
@@ -78,6 +90,12 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
         _dbContext.DailyPatientFeedbacks.Add(feedback);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        await NotifyDoctorOfFeedbackAsync(
+            patientId,
+            doctorId.Value,
+            wasUpdated: false,
+            cancellationToken);
+
         return AuthResult<SubmitDailyFeedbackResponse>.Success(
             new SubmitDailyFeedbackResponse(
                 feedback.DailyPatientFeedbackId,
@@ -88,6 +106,30 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                 feedback.HardnessScore,
                 feedback.Comment,
                 WasUpdated: false));
+    }
+
+    private async Task NotifyDoctorOfFeedbackAsync(
+        Guid patientId,
+        Guid doctorId,
+        bool wasUpdated,
+        CancellationToken cancellationToken)
+    {
+        var patientName = await _dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == patientId)
+            .Select(u => u.Name)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? "Patient";
+
+        await _notifications.NotifyAsync(
+            doctorId,
+            NotificationType.DailyFeedbackReceived,
+            wasUpdated ? "Daily feedback updated" : "New daily feedback",
+            wasUpdated
+                ? $"{patientName} updated today's feedback."
+                : $"{patientName} submitted today's feedback.",
+            new { patientId, patientName },
+            cancellationToken);
     }
 
     private async Task<Guid?> ResolveDoctorIdAsync(

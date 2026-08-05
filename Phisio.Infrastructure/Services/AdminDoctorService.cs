@@ -4,6 +4,7 @@ using Phisio.Application.Admin;
 using Phisio.Application.Admin.Doctors;
 using Phisio.Application.Common;
 using Phisio.Application.Doctors;
+using Phisio.Application.Notifications;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
@@ -18,15 +19,18 @@ public class AdminDoctorService : IAdminDoctorService
     private readonly AppDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
+    private readonly INotificationService _notifications;
 
     public AdminDoctorService(
         AppDbContext dbContext,
         UserManager<ApplicationUser> userManager,
-        RoleManager<ApplicationRole> roleManager)
+        RoleManager<ApplicationRole> roleManager,
+        INotificationService? notifications = null)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _roleManager = roleManager;
+        _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
     public async Task<AuthResult<IReadOnlyList<DoctorDto>>> GetAllAsync(
@@ -270,6 +274,14 @@ public class AdminDoctorService : IAdminDoctorService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _notifications.NotifyAsync(
+            doctorId,
+            NotificationType.DoctorActivated,
+            "Account approved",
+            "Your doctor account has been approved. You can now sign in.",
+            new { doctorId, doctorName = doctor.Name },
+            cancellationToken);
 
         return AuthResult<bool>.Success(true);
     }

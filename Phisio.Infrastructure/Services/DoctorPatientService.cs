@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorPatients;
+using Phisio.Application.Notifications;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Persistence;
@@ -17,10 +18,14 @@ public class DoctorPatientService : IDoctorPatientService
     public const string NoValidExercisesError = DoctorPatientErrors.NoValidExercises;
 
     private readonly AppDbContext _dbContext;
+    private readonly INotificationService _notifications;
 
-    public DoctorPatientService(AppDbContext dbContext)
+    public DoctorPatientService(
+        AppDbContext dbContext,
+        INotificationService? notifications = null)
     {
         _dbContext = dbContext;
+        _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
     public async Task<AuthResult<IReadOnlyList<DoctorPatientDto>>> GetPatientsAsync(
@@ -112,6 +117,15 @@ public class DoctorPatientService : IDoctorPatientService
         relationship.CreatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var doctorName = await GetUserNameAsync(doctorId, cancellationToken);
+        await _notifications.NotifyAsync(
+            patientId,
+            NotificationType.LinkApproved,
+            "Link approved",
+            $"{doctorName} accepted your care request.",
+            new { doctorId, doctorName },
+            cancellationToken);
+
         return AuthResult<DoctorPatientDto>.Success(new DoctorPatientDto(
             patient.Id,
             patient.Name,
@@ -138,6 +152,15 @@ public class DoctorPatientService : IDoctorPatientService
         relationship.Status = DoctorPatientStatus.Rejected;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var doctorName = await GetUserNameAsync(doctorId, cancellationToken);
+        await _notifications.NotifyAsync(
+            patientId,
+            NotificationType.LinkRejected,
+            "Link declined",
+            $"{doctorName} declined your care request.",
+            new { doctorId, doctorName },
+            cancellationToken);
+
         return AuthResult<bool>.Success(true);
     }
 
@@ -159,6 +182,15 @@ public class DoctorPatientService : IDoctorPatientService
 
         relationship.IsEnabled = false;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var doctorName = await GetUserNameAsync(doctorId, cancellationToken);
+        await _notifications.NotifyAsync(
+            patientId,
+            NotificationType.PatientRemoved,
+            "Care link ended",
+            $"{doctorName} removed you from their patient list.",
+            new { doctorId, doctorName },
+            cancellationToken);
 
         return AuthResult<bool>.Success(true);
     }
@@ -327,6 +359,20 @@ public class DoctorPatientService : IDoctorPatientService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (assignedCount > 0)
+        {
+            var doctorName = await GetUserNameAsync(doctorId, cancellationToken);
+            await _notifications.NotifyAsync(
+                patientId,
+                NotificationType.ExercisesAssigned,
+                "New exercises assigned",
+                assignedCount == 1
+                    ? $"{doctorName} assigned 1 exercise for you."
+                    : $"{doctorName} assigned {assignedCount} exercises for you.",
+                new { doctorId, doctorName, count = assignedCount },
+                cancellationToken);
+        }
 
         return AuthResult<AssignPatientExercisesResultDto>.Success(new AssignPatientExercisesResultDto(assignedCount));
     }
@@ -701,6 +747,16 @@ public class DoctorPatientService : IDoctorPatientService
             cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var doctorName = await GetUserNameAsync(doctorId, cancellationToken);
+        await _notifications.NotifyAsync(
+            patientId,
+            NotificationType.ProgramCreated,
+            "New exercise program",
+            $"{doctorName} created an exercise program for you.",
+            new { doctorId, doctorName, programId, count = assignedCount },
+            cancellationToken);
+
         return AuthResult<CreateExerciseProgramResultDto>.Success(
             new CreateExerciseProgramResultDto(programId, assignedCount));
     }
@@ -1244,4 +1300,12 @@ public class DoctorPatientService : IDoctorPatientService
         string? Reps,
         string? ClinicianNote,
         string? PatientCue);
+
+    private async Task<string> GetUserNameAsync(Guid userId, CancellationToken cancellationToken) =>
+        await _dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.Name)
+            .FirstOrDefaultAsync(cancellationToken)
+        ?? "User";
 }

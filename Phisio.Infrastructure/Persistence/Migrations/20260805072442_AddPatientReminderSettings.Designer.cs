@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Phisio.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Phisio.Infrastructure.Persistence;
 namespace Phisio.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805072442_AddPatientReminderSettings")]
+    partial class AddPatientReminderSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -778,34 +781,6 @@ namespace Phisio.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("time")
                         .HasDefaultValue(new TimeOnly(9, 0, 0));
-
-                    b.Property<DateOnly?>("ReminderAnchorDate")
-                        .HasColumnType("date");
-
-                    b.Property<int>("ReminderDaysOfWeekMask")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(127);
-
-                    b.Property<bool>("ReminderFollowUpEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<TimeOnly>("ReminderFollowUpTime")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("time")
-                        .HasDefaultValue(new TimeOnly(18, 0, 0));
-
-                    b.Property<int>("ReminderIntervalDays")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1);
-
-                    b.Property<int>("ReminderRepeatMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1);
 
                     b.Property<string>("Role")
                         .IsRequired()

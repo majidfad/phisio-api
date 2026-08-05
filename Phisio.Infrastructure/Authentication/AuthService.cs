@@ -2,9 +2,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Auth;
 using Phisio.Application.Common;
+using Phisio.Application.Notifications;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
+using Phisio.Infrastructure.Services;
 
 namespace Phisio.Infrastructure.Authentication;
 
@@ -13,15 +15,18 @@ public class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly INotificationService _notifications;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
         RoleManager<ApplicationRole> roleManager,
-        IJwtTokenService jwtTokenService)
+        IJwtTokenService jwtTokenService,
+        INotificationService? notifications = null)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _jwtTokenService = jwtTokenService;
+        _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
     public async Task<AuthResult<RegisterResponse>> RegisterAsync(
@@ -270,6 +275,23 @@ public class AuthService : IAuthService
             await _userManager.DeleteAsync(user);
             return AuthResult<RegisterResponse>.Failure(
                 IdentityErrorLocalizer.Localize(addRoleResult.Errors));
+        }
+
+        var adminIds = await _userManager.Users
+            .AsNoTracking()
+            .Where(u => u.Role == UserRole.Admin && u.IsEnabled)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+
+        if (adminIds.Count > 0)
+        {
+            await _notifications.NotifyManyAsync(
+                adminIds,
+                NotificationType.DoctorPendingActivation,
+                "New doctor registration",
+                $"{user.Name} registered and is waiting for approval.",
+                new { doctorId = user.Id, doctorName = user.Name },
+                cancellationToken);
         }
 
         return AuthResult<RegisterResponse>.Success(

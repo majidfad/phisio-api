@@ -17,10 +17,13 @@ using Phisio.Application.DoctorPatients;
 using Phisio.Application.ExerciseCategories;
 using Phisio.Application.Exercises;
 using Phisio.Application.Patients;
+using Phisio.Application.Notifications;
 using Phisio.Application.PatientDailyFeedback;
 using Phisio.Application.PatientDoctors;
 using Phisio.Application.PatientExercises;
+using Phisio.Application.PatientSettings;
 using Phisio.Infrastructure.Authentication;
+using Phisio.Infrastructure.Background;
 using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 using Phisio.Infrastructure.Persistence.Seeding;
@@ -91,6 +94,9 @@ public static class DependencyInjection
         services.AddScoped<IAssignmentService, AssignmentService>();
         services.AddScoped<IPatientExerciseService, PatientExerciseService>();
         services.AddScoped<IPatientDailyFeedbackService, PatientDailyFeedbackService>();
+        services.AddScoped<IPatientSettingsService, PatientSettingsService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddHostedService<ExerciseReminderBackgroundService>();
         services.AddScoped<IdentitySeeder>();
 
         return services;

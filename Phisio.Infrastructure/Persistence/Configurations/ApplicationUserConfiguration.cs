@@ -24,6 +24,45 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
             .IsRequired()
             .HasMaxLength(20);
 
+        builder.Property(u => u.ExerciseRemindersEnabled)
+            .IsRequired()
+            .HasDefaultValue(true);
+
+        builder.Property(u => u.PreferredReminderTime)
+            .IsRequired()
+            .HasColumnType("time")
+            .HasDefaultValue(new TimeOnly(9, 0));
+
+        builder.Property(u => u.TimeZoneId)
+            .IsRequired()
+            .HasMaxLength(100)
+            .HasDefaultValue("Asia/Tehran");
+
+        builder.Property(u => u.ReminderRepeatMode)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(ReminderRepeatMode.Daily);
+
+        builder.Property(u => u.ReminderDaysOfWeekMask)
+            .IsRequired()
+            .HasDefaultValue(0b1111111);
+
+        builder.Property(u => u.ReminderIntervalDays)
+            .IsRequired()
+            .HasDefaultValue(1);
+
+        builder.Property(u => u.ReminderAnchorDate)
+            .HasColumnType("date");
+
+        builder.Property(u => u.ReminderFollowUpEnabled)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.ReminderFollowUpTime)
+            .IsRequired()
+            .HasColumnType("time")
+            .HasDefaultValue(new TimeOnly(18, 0));
+
         builder.HasIndex(u => u.PhoneNumber)
             .IsUnique();
 

@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
+using Phisio.Application.Notifications;
 using Phisio.Application.PatientExercises;
 using Phisio.Domain.Entities;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Persistence;
 
 namespace Phisio.Infrastructure.Services;
@@ -9,10 +11,14 @@ namespace Phisio.Infrastructure.Services;
 public class PatientExerciseService : IPatientExerciseService
 {
     private readonly AppDbContext _dbContext;
+    private readonly INotificationService _notifications;
 
-    public PatientExerciseService(AppDbContext dbContext)
+    public PatientExerciseService(
+        AppDbContext dbContext,
+        INotificationService? notifications = null)
     {
         _dbContext = dbContext;
+        _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
     public async Task<AuthResult<PatientExercisesResponse>> GetExercisesAsync(
@@ -213,6 +219,31 @@ public class PatientExerciseService : IPatientExerciseService
         if (createdIds.Count > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var patientName = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == patientId)
+                .Select(u => u.Name)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? "Patient";
+
+            var byDoctor = assignments
+                .Where(a => createdIds.Contains(a.UserExerciseId))
+                .GroupBy(a => a.DoctorId)
+                .Select(g => new { DoctorId = g.Key, Count = g.Count() });
+
+            foreach (var group in byDoctor)
+            {
+                await _notifications.NotifyAsync(
+                    group.DoctorId,
+                    NotificationType.ExercisesCompleted,
+                    "Exercises completed",
+                    group.Count == 1
+                        ? $"{patientName} completed 1 exercise."
+                        : $"{patientName} completed {group.Count} exercises.",
+                    new { patientId, patientName, count = group.Count },
+                    cancellationToken);
+            }
         }
 
         return AuthResult<CompleteExercisesResponse>.Success(

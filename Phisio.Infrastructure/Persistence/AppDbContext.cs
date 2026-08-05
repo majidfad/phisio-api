@@ -36,6 +36,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
     public DbSet<DailyPatientFeedback> DailyPatientFeedbacks => Set<DailyPatientFeedback>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+
     public override int SaveChanges()
     {
         ApplyAuditableTimestamps();
