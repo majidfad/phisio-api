@@ -1,4 +1,4 @@
-# Reverse proxy for zivan.me / test.zivan.me
+# Reverse proxy for zivan.me
 # Public TLS is terminated by Cloudflare. Cloudflare connects to this origin over
 # HTTP (:80). This proxy forwards to the web container (:80), which serves the SPA
 # and proxies /api and /uploads to the API.
@@ -42,11 +42,10 @@ map $http_x_forwarded_proto $forwarded_proto {
     ''      https;
 }
 
-# App hosts (production + test subdomain)
 server {
-    listen 80;
-    listen [::]:80;
-    server_name zivan.me www.zivan.me test.zivan.me;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name zivan.me www.zivan.me;
 
     client_max_body_size ${CLIENT_MAX_BODY_SIZE};
     client_body_timeout 600s;
@@ -73,30 +72,5 @@ server {
         proxy_set_header X-Forwarded-Proto $forwarded_proto;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-    }
-}
-
-# Unknown hosts / direct IP → simple 404 page
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
-
-    root /usr/share/nginx/html;
-    index 404.html;
-
-    location = /healthz {
-        return 200 "ok\n";
-        access_log off;
-    }
-
-    error_page 404 /404.html;
-
-    location = /404.html {
-        internal;
-    }
-
-    location / {
-        return 404;
     }
 }
