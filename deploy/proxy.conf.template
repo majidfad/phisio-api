@@ -76,19 +76,37 @@ server {
     }
 }
 
-# Unknown hosts / direct IP → simple 404 page
+# Unknown hosts / direct IP on :80 → simple 404 page
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
 
     root /usr/share/nginx/html;
-    index 404.html;
 
     location = /healthz {
         return 200 "ok\n";
         access_log off;
     }
+
+    error_page 404 /404.html;
+
+    location = /404.html {
+        internal;
+    }
+
+    location / {
+        return 404;
+    }
+}
+
+# Local-only probe port: always show the 404 page (127.0.0.1:8080)
+server {
+    listen 8080 default_server;
+    listen [::]:8080 default_server;
+    server_name _;
+
+    root /usr/share/nginx/html;
 
     error_page 404 /404.html;
 

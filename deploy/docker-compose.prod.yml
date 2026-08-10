@@ -143,6 +143,8 @@ services:
       CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-500m}
     ports:
       - '80:80'
+      # Localhost only — always serves the simple 404 page.
+      - '127.0.0.1:8080:8080'
     volumes:
       - ./proxy.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./html:/usr/share/nginx/html:ro
