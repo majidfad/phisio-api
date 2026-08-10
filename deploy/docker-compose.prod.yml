@@ -145,6 +145,7 @@ services:
       - '80:80'
     volumes:
       - ./proxy.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./html:/usr/share/nginx/html:ro
     depends_on:
       - web
     networks:
