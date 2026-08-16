@@ -18,6 +18,14 @@ public class IdentitySeeder
 
     private static readonly string AdminRoleName = nameof(UserRole.Admin);
 
+    private static readonly string[] SeedRoles =
+    [
+        nameof(UserRole.Admin),
+        nameof(UserRole.Doctor),
+        nameof(UserRole.Patient),
+        nameof(UserRole.ClinicManager),
+    ];
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly SeedAdminOptions _options;
@@ -39,7 +47,7 @@ public class IdentitySeeder
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        await EnsureRoleExistsAsync(cancellationToken);
+        await EnsureRolesExistAsync(cancellationToken);
 
         var adminExists = await _userManager.Users
             .AnyAsync(u => u.Role == UserRole.Admin && u.IsEnabled, cancellationToken);
@@ -92,22 +100,25 @@ public class IdentitySeeder
         _logger.LogInformation("Initial admin user created successfully.");
     }
 
-    private async Task EnsureRoleExistsAsync(CancellationToken cancellationToken)
+    private async Task EnsureRolesExistAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (await _roleManager.RoleExistsAsync(AdminRoleName))
+        foreach (var roleName in SeedRoles)
         {
-            return;
-        }
+            if (await _roleManager.RoleExistsAsync(roleName))
+            {
+                continue;
+            }
 
-        var createRoleResult = await _roleManager.CreateAsync(
-            new ApplicationRole { Id = Guid.NewGuid(), Name = AdminRoleName });
+            var createRoleResult = await _roleManager.CreateAsync(
+                new ApplicationRole { Id = Guid.NewGuid(), Name = roleName });
 
-        if (!createRoleResult.Succeeded)
-        {
-            throw new InvalidOperationException(
-                $"Failed to create role '{AdminRoleName}': {string.Join(", ", createRoleResult.Errors.Select(e => e.Description))}");
+            if (!createRoleResult.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to create role '{roleName}': {string.Join(", ", createRoleResult.Errors.Select(e => e.Description))}");
+            }
         }
     }
 }

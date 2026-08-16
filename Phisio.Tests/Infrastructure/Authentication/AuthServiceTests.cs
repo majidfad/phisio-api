@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Moq;
 using Phisio.Application.Auth;
+using Phisio.Application.Common;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Authentication;
 using Phisio.Infrastructure.Identity;
@@ -150,6 +151,99 @@ public class AuthServiceLoginTests
         userManager.Verify(
             manager => manager.CheckPasswordAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenClinicManagerIsDisabled_ReturnsNotApprovedFailure()
+    {
+        // Arrange
+        var user = ApplicationUserBuilder.ClinicManager();
+        user.IsEnabled = false;
+        var request = new LoginRequest
+        {
+            PhoneNumber = user.PhoneNumber!,
+            Password = "SecurePass1!"
+        };
+
+        var userManager = IdentityMockFactory.CreateUserManager([user]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.LoginAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(AuthErrorMessages.AccountNotApproved);
+
+        userManager.Verify(
+            manager => manager.CheckPasswordAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenClinicManagerCredentialsAreValid_ReturnsSuccess()
+    {
+        // Arrange
+        const string password = "SecurePass1!";
+        var user = ApplicationUserBuilder.ClinicManager();
+        var request = new LoginRequest
+        {
+            PhoneNumber = user.PhoneNumber!,
+            Password = password
+        };
+
+        var userManager = IdentityMockFactory.CreateUserManager([user]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create("jwt-token", DateTime.UtcNow.AddHours(2));
+
+        userManager.Setup(manager => manager.CheckPasswordAsync(user, password))
+            .ReturnsAsync(true);
+
+        userManager.Setup(manager => manager.GetRolesAsync(user))
+            .ReturnsAsync([nameof(UserRole.ClinicManager)]);
+
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.LoginAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.Role.Should().Be(UserRole.ClinicManager);
+        result.Value.AccessToken.Should().Be("jwt-token");
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenDoctorAlsoHasClinicManagerRole_ReturnsClinicManagerAsPrimaryRole()
+    {
+        const string password = "SecurePass1!";
+        var user = ApplicationUserBuilder.Doctor();
+        var request = new LoginRequest
+        {
+            PhoneNumber = user.PhoneNumber!,
+            Password = password
+        };
+
+        var userManager = IdentityMockFactory.CreateUserManager([user]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+
+        userManager.Setup(manager => manager.CheckPasswordAsync(user, password))
+            .ReturnsAsync(true);
+        userManager.Setup(manager => manager.GetRolesAsync(user))
+            .ReturnsAsync([RoleNames.Doctor, RoleNames.ClinicManager]);
+
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        var result = await sut.LoginAsync(request);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Role.Should().Be(UserRole.ClinicManager);
+        user.Role.Should().Be(UserRole.Doctor);
     }
 
     [Fact]

@@ -68,4 +68,25 @@ public class RegisterRequestValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.ConfirmPassword)
             .WithErrorMessage(AuthErrorMessages.PasswordMismatch);
     }
+
+    [Fact]
+    public void Validate_WhenRoleIsClinicManager_ShouldHaveRoleError()
+    {
+        // Arrange
+        var request = new RegisterRequest
+        {
+            Name = "مدیر کلینیک",
+            PhoneNumber = "09121234567",
+            Password = "Password123!",
+            ConfirmPassword = "Password123!",
+            Role = Domain.Enums.UserRole.ClinicManager
+        };
+
+        // Act
+        var result = _validator.TestValidate(request);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.Role)
+            .WithErrorMessage(AuthErrorMessages.InvalidRegistrationRole);
+    }
 }

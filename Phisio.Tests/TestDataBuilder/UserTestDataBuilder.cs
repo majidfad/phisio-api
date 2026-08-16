@@ -26,6 +26,13 @@ internal static class ApplicationUserBuilder
         Guid? id = null) =>
         CreateUser(name, UserRole.Admin, phoneNumber, email, id);
 
+    public static ApplicationUser ClinicManager(
+        string name = "Clinic Manager",
+        string phoneNumber = "+15559876543",
+        string? email = "manager@example.com",
+        Guid? id = null) =>
+        CreateUser(name, UserRole.ClinicManager, phoneNumber, email, id);
+
     private static ApplicationUser CreateUser(
         string name,
         UserRole role,

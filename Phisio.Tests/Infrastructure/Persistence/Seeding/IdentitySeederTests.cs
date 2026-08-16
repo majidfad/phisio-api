@@ -7,6 +7,7 @@ using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence.Seeding;
 using Phisio.Tests.MockFactory;
+using Phisio.Tests.TestDataBuilder;
 
 namespace Phisio.Tests.Infrastructure.Persistence.Seeding;
 
@@ -211,7 +212,7 @@ public class IdentitySeederTests
         var userManager = IdentityMockFactory.CreateUserManager();
         var roleManager = IdentityMockFactory.CreateRoleManager();
 
-        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Admin)))
+        roleManager.Setup(manager => manager.RoleExistsAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
         roleManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationRole>()))
             .ReturnsAsync(IdentityResult.Success);
@@ -230,12 +231,52 @@ public class IdentitySeederTests
         roleManager.Verify(
             manager => manager.CreateAsync(It.Is<ApplicationRole>(role => role.Name == nameof(UserRole.Admin))),
             Times.Once);
+        roleManager.Verify(
+            manager => manager.CreateAsync(It.Is<ApplicationRole>(role => role.Name == nameof(UserRole.ClinicManager))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SeedAsync_WhenClinicManagerRoleMissing_CreatesClinicManagerRole()
+    {
+        // Arrange
+        var existingAdmin = ApplicationUserBuilder.Admin();
+        var userManager = IdentityMockFactory.CreateUserManager([existingAdmin]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Admin)))
+            .ReturnsAsync(true);
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Patient)))
+            .ReturnsAsync(true);
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.ClinicManager)))
+            .ReturnsAsync(false);
+        roleManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationRole>()))
+            .ReturnsAsync(IdentityResult.Success);
+
+        var sut = CreateSeeder(userManager, roleManager, phoneNumber: null, password: null);
+
+        // Act
+        await sut.SeedAsync();
+
+        // Assert
+        roleManager.Verify(
+            manager => manager.CreateAsync(
+                It.Is<ApplicationRole>(role => role.Name == nameof(UserRole.ClinicManager))),
+            Times.Once);
     }
 
     private static Mock<RoleManager<ApplicationRole>> CreateRoleManagerWithExistingRole()
     {
         var roleManager = IdentityMockFactory.CreateRoleManager();
         roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Admin)))
+            .ReturnsAsync(true);
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Patient)))
+            .ReturnsAsync(true);
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.ClinicManager)))
             .ReturnsAsync(true);
         return roleManager;
     }

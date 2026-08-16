@@ -82,7 +82,7 @@ public class AuthService : IAuthService
 
         if (!user.IsEnabled)
         {
-            return user.Role == UserRole.Doctor
+            return user.Role.HasDoctorAccess()
                 ? AuthResult<AuthResponse>.Failure([AuthErrorMessages.AccountNotApproved])
                 : AuthResult<AuthResponse>.Failure(["This account has been disabled."]);
         }
@@ -100,6 +100,9 @@ public class AuthService : IAuthService
                 user.UserName!,
                 user.Name,
                 roles.Append(user.Role.ToString()).Distinct(StringComparer.OrdinalIgnoreCase)));
+        var responseRole = roles.Contains(RoleNames.ClinicManager, StringComparer.OrdinalIgnoreCase)
+            ? UserRole.ClinicManager
+            : user.Role;
 
         return AuthResult<AuthResponse>.Success(
             new AuthResponse(
@@ -109,7 +112,7 @@ public class AuthService : IAuthService
                 user.PhoneNumber!,
                 user.Email,
                 user.Name,
-                user.Role));
+                responseRole));
     }
 
     public async Task<AuthResult<MeResponse>> GetCurrentUserAsync(

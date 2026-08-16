@@ -40,7 +40,7 @@ public class AdminDoctorService : IAdminDoctorService
         var doctors = await _userManager.Users
             .AsNoTracking()
             .WhereEnabledStatus(isEnabled)
-            .Where(user => user.Role == UserRole.Doctor)
+            .Where(user => user.Role == UserRole.Doctor || user.Role == UserRole.ClinicManager)
             .OrderBy(user => user.Name)
             .ToListAsync(cancellationToken);
 
@@ -51,9 +51,13 @@ public class AdminDoctorService : IAdminDoctorService
 
         var doctorIds = doctors.Select(doctor => doctor.Id).ToList();
         var profiles = await GetProfilesByDoctorIdsAsync(doctorIds, isEnabled, cancellationToken);
+        var managedClinics = await GetManagedClinicNamesByUserIdsAsync(doctorIds, cancellationToken);
 
         var result = doctors
-            .Select(doctor => MapToDto(doctor, profiles.GetValueOrDefault(doctor.Id)))
+            .Select(doctor => MapToDto(
+                doctor,
+                profiles.GetValueOrDefault(doctor.Id),
+                managedClinics.GetValueOrDefault(doctor.Id)))
             .ToList();
 
         return AuthResult<IReadOnlyList<DoctorDto>>.Success(result);
@@ -63,7 +67,7 @@ public class AdminDoctorService : IAdminDoctorService
         Guid doctorId,
         CancellationToken cancellationToken = default)
     {
-        var doctor = await FindDoctorAsync(doctorId, cancellationToken);
+        var doctor = await FindDoctorOrClinicManagerAsync(doctorId, cancellationToken);
 
         if (doctor is null)
         {
@@ -73,8 +77,10 @@ public class AdminDoctorService : IAdminDoctorService
         var profile = await _dbContext.DoctorProfiles
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.DoctorId == doctorId, cancellationToken);
+        var managedClinics = await GetManagedClinicNamesByUserIdsAsync([doctorId], cancellationToken);
 
-        return AuthResult<DoctorDto>.Success(MapToDto(doctor, profile));
+        return AuthResult<DoctorDto>.Success(
+            MapToDto(doctor, profile, managedClinics.GetValueOrDefault(doctorId)));
     }
 
     public async Task<AuthResult<CreateAdminDoctorResponse>> CreateAsync(
@@ -374,6 +380,18 @@ public class AdminDoctorService : IAdminDoctorService
                 cancellationToken);
     }
 
+    private async Task<ApplicationUser?> FindDoctorOrClinicManagerAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken)
+    {
+        return await _userManager.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                user => user.Id == doctorId
+                    && (user.Role == UserRole.Doctor || user.Role == UserRole.ClinicManager),
+                cancellationToken);
+    }
+
     private async Task<Dictionary<Guid, DoctorProfile>> GetProfilesByDoctorIdsAsync(
         IReadOnlyCollection<Guid> doctorIds,
         bool isEnabled,
@@ -389,6 +407,31 @@ public class AdminDoctorService : IAdminDoctorService
             .WhereEnabledStatus(isEnabled)
             .Where(profile => doctorIds.Contains(profile.DoctorId))
             .ToDictionaryAsync(profile => profile.DoctorId, cancellationToken);
+    }
+
+    private async Task<Dictionary<Guid, IReadOnlyList<string>>> GetManagedClinicNamesByUserIdsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
+        {
+            return [];
+        }
+
+        var clinics = await _dbContext.Clinics
+            .AsNoTracking()
+            .Where(clinic => userIds.Contains(clinic.ClinicManagerId))
+            .Select(clinic => new { clinic.ClinicManagerId, clinic.Name })
+            .ToListAsync(cancellationToken);
+
+        return clinics
+            .GroupBy(clinic => clinic.ClinicManagerId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group
+                    .Select(clinic => clinic.Name)
+                    .OrderBy(name => name)
+                    .ToList());
     }
 
     private static DoctorProfile CreateProfile(Guid doctorId, CreateAdminDoctorDto request) =>
@@ -427,8 +470,15 @@ public class AdminDoctorService : IAdminDoctorService
         profile.ClinicAddress = request.ClinicAddress.Trim();
     }
 
-    private static DoctorDto MapToDto(ApplicationUser doctor, DoctorProfile? profile) =>
-        new(
+    private static DoctorDto MapToDto(
+        ApplicationUser doctor,
+        DoctorProfile? profile,
+        IReadOnlyList<string>? managedClinicNames = null)
+    {
+        var clinics = managedClinicNames ?? [];
+        var isClinicManager = doctor.Role == UserRole.ClinicManager || clinics.Count > 0;
+
+        return new(
             doctor.Id,
             doctor.Name,
             doctor.PhoneNumber ?? string.Empty,
@@ -437,7 +487,10 @@ public class AdminDoctorService : IAdminDoctorService
             profile?.ClinicAddress ?? string.Empty,
             profile?.CreatedAt ?? doctor.CreatedAt,
             doctor.Email,
-            doctor.IsEnabled);
+            doctor.IsEnabled,
+            isClinicManager,
+            clinics);
+    }
 
     private async Task<string?> ValidateUniqueCredentialsAsync(
         string phoneNumber,

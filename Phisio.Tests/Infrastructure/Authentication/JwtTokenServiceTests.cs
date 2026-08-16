@@ -143,6 +143,21 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
+    public void GenerateAccessToken_IncludesClinicManagerRole()
+    {
+        // Arrange
+        var request = JwtTestDataBuilder.CreateRequest(roles: [nameof(UserRole.ClinicManager)]);
+        var sut = CreateSut();
+
+        // Act
+        var result = sut.GenerateAccessToken(request);
+
+        // Assert
+        JwtTokenTestHelper.GetRoleClaims(result.AccessToken)
+            .Should().Contain(nameof(UserRole.ClinicManager));
+    }
+
+    [Fact]
     public void GenerateAccessToken_IncludesPatientRole()
     {
         // Arrange

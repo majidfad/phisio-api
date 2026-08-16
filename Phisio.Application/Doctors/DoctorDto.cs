@@ -9,4 +9,6 @@ public sealed record DoctorDto(
     string ClinicAddress,
     DateTime CreatedAt,
     string? Email = null,
-    bool IsEnabled = true);
+    bool IsEnabled = true,
+    bool IsClinicManager = false,
+    IReadOnlyList<string>? ManagedClinicNames = null);

@@ -76,6 +76,52 @@ public class AdminDoctorServiceGetAllTests
         charlieDto.MedicalLicenseNumber.Should().BeEmpty();
         charlieDto.ClinicAddress.Should().BeEmpty();
         charlieDto.CreatedAt.Should().BeCloseTo(charlie.CreatedAt, TimeSpan.FromSeconds(1));
+        charlieDto.IsClinicManager.Should().BeFalse();
+        charlieDto.ManagedClinicNames.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WhenClinicManagersExist_ReturnsManagedClinicNames()
+    {
+        var manager = ApplicationUserBuilder.ClinicManager(name: "Sara Manager");
+        var doctor = ApplicationUserBuilder.Doctor(name: "Dr. Only");
+        var northClinic = new Domain.Entities.Clinic
+        {
+            ClinicId = Guid.NewGuid(),
+            Name = "North Clinic",
+            Address = "Tehran",
+            ClinicManagerId = manager.Id,
+        };
+        northClinic.EnsureManagerDoctorMembership();
+        var southClinic = new Domain.Entities.Clinic
+        {
+            ClinicId = Guid.NewGuid(),
+            Name = "South Clinic",
+            Address = "Isfahan",
+            ClinicManagerId = manager.Id,
+        };
+        southClinic.EnsureManagerDoctorMembership();
+
+        var userManager = IdentityMockFactory.CreateUserManager([manager, doctor]);
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var dbContext = AppDbContextMockFactory.CreateMock(users: [manager, doctor]).Object;
+        dbContext.Clinics.AddRange(northClinic, southClinic);
+        await dbContext.SaveChangesAsync();
+
+        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+
+        var result = await sut.GetAllAsync();
+
+        result.Succeeded.Should().BeTrue();
+        result.Value.Should().HaveCount(2);
+
+        var managerDto = result.Value!.Single(dto => dto.Id == manager.Id);
+        managerDto.IsClinicManager.Should().BeTrue();
+        managerDto.ManagedClinicNames.Should().Equal("North Clinic", "South Clinic");
+
+        var doctorDto = result.Value.Single(dto => dto.Id == doctor.Id);
+        doctorDto.IsClinicManager.Should().BeFalse();
+        doctorDto.ManagedClinicNames.Should().BeNullOrEmpty();
     }
 }
 

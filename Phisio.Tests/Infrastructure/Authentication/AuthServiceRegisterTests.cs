@@ -268,6 +268,31 @@ public class AuthServiceRegisterTests
     }
 
     [Fact]
+    public async Task RegisterAsync_WhenRoleIsClinicManager_ReturnsFailure()
+    {
+        // Arrange
+        var request = RegisterRequestBuilder.Valid();
+        request.Role = UserRole.ClinicManager;
+
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+
+        // Act
+        var result = await sut.RegisterAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(AuthErrorMessages.InvalidRegistrationRole);
+
+        userManager.Verify(
+            manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task RegisterAsync_WhenDoctorPhoneNumberAlreadyExists_ReturnsFailure()
     {
         // Arrange

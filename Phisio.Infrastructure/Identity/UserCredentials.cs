@@ -1,16 +1,12 @@
+using Phisio.Application.Common;
+
 namespace Phisio.Infrastructure.Identity;
 
 internal static class UserCredentials
 {
     public static string NormalizePhone(string phoneNumber)
     {
-        if (string.IsNullOrWhiteSpace(phoneNumber))
-        {
-            return string.Empty;
-        }
-
-        var digits = new string(phoneNumber.Where(char.IsDigit).ToArray());
-        return digits.Length == 0 ? phoneNumber.Trim() : "+" + digits;
+        return PhoneNumberNormalizer.Normalize(phoneNumber);
     }
 
     public static IReadOnlyCollection<string> GetPhoneLookupValues(string phoneNumber)

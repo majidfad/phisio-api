@@ -68,13 +68,16 @@ public static class JwtAuthenticationExtensions
         services.AddAuthorization(options =>
         {
             options.AddPolicy(AuthorizationPolicies.DoctorOnly, policy =>
-                policy.RequireRole(nameof(UserRole.Doctor)));
+                policy.RequireRole(RoleNames.DoctorAccess));
 
             options.AddPolicy(AuthorizationPolicies.PatientOnly, policy =>
                 policy.RequireRole(nameof(UserRole.Patient)));
 
             options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
+
+            options.AddPolicy(AuthorizationPolicies.ClinicManagement, policy =>
+                policy.RequireRole(RoleNames.Admin, RoleNames.ClinicManager, RoleNames.Doctor));
         });
 
         return services;

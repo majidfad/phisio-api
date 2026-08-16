@@ -40,6 +40,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
+    public DbSet<Clinic> Clinics => Set<Clinic>();
+
+    public DbSet<ClinicDoctor> ClinicDoctors => Set<ClinicDoctor>();
+
+    public DbSet<ClinicPhoneNumber> ClinicPhoneNumbers => Set<ClinicPhoneNumber>();
+
     public override int SaveChanges()
     {
         ApplyAuditableTimestamps();

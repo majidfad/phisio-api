@@ -57,4 +57,6 @@ public class ApplicationUser : IdentityUser<Guid>, IAuditableEntity, ISoftDeleta
     public ICollection<UserExercise> UserExercises { get; set; } = new List<UserExercise>();
 
     public DoctorProfile? DoctorProfile { get; set; }
+
+    public ICollection<Clinic> ManagedClinics { get; set; } = new List<Clinic>();
 }

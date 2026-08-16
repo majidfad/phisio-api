@@ -54,7 +54,8 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseHttpsRedirection();
+    // Do not redirect HTTP→HTTPS in Development: the Vite SPA proxies to
+    // http://localhost:5111, and browsers strip Authorization after the 307.
 }
 
 app.UseCors();
