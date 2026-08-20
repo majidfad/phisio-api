@@ -45,13 +45,16 @@ public class DoctorPatientsControllerGetPatientsTests
     {
         // Arrange
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        var clinicId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var patients = new List<DoctorPatientDto>
         {
             new(
                 Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7"),
                 "Alice Patient",
                 "+15551111111",
-                DateTime.UtcNow.AddDays(-2))
+                DateTime.UtcNow.AddDays(-2),
+                clinicId,
+                "North Clinic")
         };
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
@@ -78,21 +81,28 @@ public class DoctorPatientsControllerApproveRequestTests
     {
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
         var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var clinicId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var approved = new DoctorPatientDto(
             patientId,
             "Alice Patient",
             "+15551111111",
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            clinicId,
+            "North Clinic");
 
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.ApproveRequestAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        doctorPatientService.Setup(service => service.ApproveRequestAsync(
+                doctorId,
+                patientId,
+                clinicId,
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<DoctorPatientDto>.Success(approved));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
             doctorPatientService,
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
-        var result = await controller.ApproveRequest(patientId, CancellationToken.None);
+        var result = await controller.ApproveRequest(patientId, clinicId, CancellationToken.None);
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().BeEquivalentTo(approved);
@@ -104,15 +114,21 @@ public class DoctorPatientsControllerApproveRequestTests
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
         var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
 
+        var clinicId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.ApproveRequestAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        doctorPatientService.Setup(service => service.ApproveRequestAsync(
+                doctorId,
+                patientId,
+                clinicId,
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<DoctorPatientDto>.Failure([DoctorPatientErrors.RequestNotFound]));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
             doctorPatientService,
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
-        var result = await controller.ApproveRequest(patientId, CancellationToken.None);
+        var result = await controller.ApproveRequest(patientId, clinicId, CancellationToken.None);
 
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -128,8 +144,14 @@ public class DoctorPatientsControllerRemovePatientTests
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
         var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
 
+        var clinicId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
         var doctorPatientService = new Mock<IDoctorPatientService>();
-        doctorPatientService.Setup(service => service.RemoveAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        doctorPatientService.Setup(service => service.RemoveAsync(
+                doctorId,
+                patientId,
+                clinicId,
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<bool>.Success(true));
 
         var controller = DoctorPatientsControllerTestHelper.CreateController(
@@ -137,7 +159,7 @@ public class DoctorPatientsControllerRemovePatientTests
             DoctorPatientsControllerTestHelper.CreateAuthenticatedDoctor(doctorId));
 
         // Act
-        var result = await controller.RemovePatient(patientId, CancellationToken.None);
+        var result = await controller.RemovePatient(patientId, clinicId, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<NoContentResult>();

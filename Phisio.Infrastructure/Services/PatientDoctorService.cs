@@ -5,6 +5,7 @@ using Phisio.Application.Notifications;
 using Phisio.Application.PatientDoctors;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
+using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 
 namespace Phisio.Infrastructure.Services;
@@ -38,7 +39,15 @@ public class PatientDoctorService : IPatientDoctorService
             .Select(dp => new { dp.DoctorId, dp.Status })
             .ToListAsync(cancellationToken);
 
-        var statusByDoctorId = relationships.ToDictionary(item => item.DoctorId, item => item.Status);
+        var statusByDoctorId = relationships
+            .GroupBy(item => item.DoctorId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Any(item => item.Status == DoctorPatientStatus.Approved)
+                    ? DoctorPatientStatus.Approved
+                    : group.Any(item => item.Status == DoctorPatientStatus.Pending)
+                        ? DoctorPatientStatus.Pending
+                        : DoctorPatientStatus.Rejected);
 
         var query =
             from doctor in _dbContext.Users.AsNoTracking()
@@ -90,6 +99,7 @@ public class PatientDoctorService : IPatientDoctorService
     public async Task<AuthResult<PatientDoctorProfileDto>> GetDoctorProfileAsync(
         Guid patientId,
         Guid doctorId,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var doctor = await (
@@ -109,11 +119,25 @@ public class PatientDoctorService : IPatientDoctorService
             return AuthResult<PatientDoctorProfileDto>.Failure([DoctorPatientErrors.DoctorNotFound]);
         }
 
-        var relationship = await _dbContext.DoctorPatients
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.IsEnabled)
-            .FirstOrDefaultAsync(cancellationToken);
+        DoctorPatient? relationship = null;
+        Clinic? clinic = null;
+
+        if (clinicId is not null)
+        {
+            relationship = await _dbContext.DoctorPatients
+                .AsNoTracking()
+                .IgnoreQueryFilters()
+                .Where(dp =>
+                    dp.DoctorId == doctorId
+                    && dp.PatientId == patientId
+                    && dp.ClinicId == clinicId.Value
+                    && dp.IsEnabled)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            clinic = await _dbContext.Clinics
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.ClinicId == clinicId.Value && item.IsEnabled, cancellationToken);
+        }
 
         return AuthResult<PatientDoctorProfileDto>.Success(new PatientDoctorProfileDto(
             doctor.User.Id,
@@ -123,7 +147,60 @@ public class PatientDoctorService : IPatientDoctorService
             doctor.Profile?.ClinicAddress ?? string.Empty,
             doctor.User.PhoneNumber ?? string.Empty,
             relationship?.Status,
-            relationship?.CreatedAt));
+            relationship?.CreatedAt,
+            clinic?.ClinicId,
+            clinic?.Name));
+    }
+
+    public async Task<AuthResult<IReadOnlyList<PatientDoctorClinicOptionDto>>> GetDoctorClinicsAsync(
+        Guid patientId,
+        Guid doctorId,
+        CancellationToken cancellationToken = default)
+    {
+        var doctorExists = await _dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user => user.Id == doctorId && user.Role == UserRole.Doctor && user.IsEnabled,
+                cancellationToken);
+
+        if (!doctorExists)
+        {
+            return AuthResult<IReadOnlyList<PatientDoctorClinicOptionDto>>.Failure(
+                [DoctorPatientErrors.DoctorNotFound]);
+        }
+
+        var relationships = await _dbContext.DoctorPatients
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.IsEnabled)
+            .Select(dp => new { dp.ClinicId, dp.Status })
+            .ToListAsync(cancellationToken);
+
+        var statusByClinicId = relationships.ToDictionary(item => item.ClinicId, item => item.Status);
+
+        var clinicRows = await (
+            from membership in _dbContext.ClinicDoctors.AsNoTracking()
+            join clinic in _dbContext.Clinics.AsNoTracking()
+                on membership.ClinicId equals clinic.ClinicId
+            where membership.DoctorId == doctorId && clinic.IsEnabled
+            orderby clinic.Name
+            select new
+            {
+                clinic.ClinicId,
+                clinic.Name,
+                clinic.Address,
+            })
+            .ToListAsync(cancellationToken);
+
+        var clinics = clinicRows
+            .Select(clinic => new PatientDoctorClinicOptionDto(
+                clinic.ClinicId,
+                clinic.Name,
+                clinic.Address,
+                statusByClinicId.TryGetValue(clinic.ClinicId, out var status) ? status : null))
+            .ToList();
+
+        return AuthResult<IReadOnlyList<PatientDoctorClinicOptionDto>>.Success(clinics);
     }
 
     public async Task<AuthResult<IReadOnlyList<PatientLinkedDoctorDto>>> GetMyDoctorsAsync(
@@ -133,6 +210,7 @@ public class PatientDoctorService : IPatientDoctorService
         var doctors = await (
             from dp in _dbContext.DoctorPatients.AsNoTracking()
             join doctor in _dbContext.Users.AsNoTracking() on dp.DoctorId equals doctor.Id
+            join clinic in _dbContext.Clinics.AsNoTracking() on dp.ClinicId equals clinic.ClinicId
             join profile in _dbContext.DoctorProfiles.AsNoTracking()
                 on doctor.Id equals profile.DoctorId into profiles
             from profile in profiles.DefaultIfEmpty()
@@ -141,7 +219,8 @@ public class PatientDoctorService : IPatientDoctorService
                 && (dp.Status == DoctorPatientStatus.Pending || dp.Status == DoctorPatientStatus.Approved)
                 && doctor.Role == UserRole.Doctor
                 && doctor.IsEnabled
-            orderby dp.Status, doctor.Name
+                && clinic.IsEnabled
+            orderby dp.Status, doctor.Name, clinic.Name
             select new PatientLinkedDoctorDto(
                 doctor.Id,
                 doctor.Name,
@@ -150,7 +229,9 @@ public class PatientDoctorService : IPatientDoctorService
                 profile != null ? profile.ClinicAddress : string.Empty,
                 doctor.PhoneNumber ?? string.Empty,
                 dp.Status,
-                dp.CreatedAt))
+                dp.CreatedAt,
+                clinic.ClinicId,
+                clinic.Name))
             .ToListAsync(cancellationToken);
 
         return AuthResult<IReadOnlyList<PatientLinkedDoctorDto>>.Success(doctors);
@@ -159,28 +240,22 @@ public class PatientDoctorService : IPatientDoctorService
     public async Task<AuthResult<PatientLinkedDoctorDto>> RequestLinkAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
-        var doctor = await (
-            from user in _dbContext.Users.AsNoTracking()
-            join profile in _dbContext.DoctorProfiles.AsNoTracking()
-                on user.Id equals profile.DoctorId into profiles
-            from profile in profiles.DefaultIfEmpty()
-            where user.Id == doctorId
-                && user.Role == UserRole.Doctor
-                && user.IsEnabled
-            select new { User = user, Profile = profile })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (doctor is null)
+        var validation = await ValidateDoctorClinicMembershipAsync(doctorId, clinicId, cancellationToken);
+        if (!validation.Succeeded)
         {
-            return AuthResult<PatientLinkedDoctorDto>.Failure([DoctorPatientErrors.DoctorNotFound]);
+            return AuthResult<PatientLinkedDoctorDto>.Failure(validation.Errors);
         }
+
+        var doctor = validation.Value!.Doctor;
+        var clinic = validation.Value.Clinic;
 
         var existing = await _dbContext.DoctorPatients
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (existing is { IsEnabled: true, Status: DoctorPatientStatus.Approved })
@@ -207,6 +282,7 @@ public class PatientDoctorService : IPatientDoctorService
             {
                 DoctorId = doctorId,
                 PatientId = patientId,
+                ClinicId = clinicId,
                 Status = DoctorPatientStatus.Pending,
                 IsEnabled = true,
                 CreatedAt = now,
@@ -226,8 +302,8 @@ public class PatientDoctorService : IPatientDoctorService
             doctorId,
             NotificationType.PatientLinkRequested,
             "New patient request",
-            $"{patientName} requested to link with you.",
-            new { patientId, patientName },
+            $"{patientName} requested to link with you at {clinic.Name}.",
+            new { patientId, patientName, clinicId, clinicName = clinic.Name },
             cancellationToken);
 
         return AuthResult<PatientLinkedDoctorDto>.Success(new PatientLinkedDoctorDto(
@@ -238,18 +314,21 @@ public class PatientDoctorService : IPatientDoctorService
             doctor.Profile?.ClinicAddress ?? string.Empty,
             doctor.User.PhoneNumber ?? string.Empty,
             DoctorPatientStatus.Pending,
-            now));
+            now,
+            clinic.ClinicId,
+            clinic.Name));
     }
 
     public async Task<AuthResult<bool>> CancelRequestAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var relationship = await _dbContext.DoctorPatients
             .WherePending()
             .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (relationship is null)
@@ -266,12 +345,13 @@ public class PatientDoctorService : IPatientDoctorService
     public async Task<AuthResult<bool>> UnlinkAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var relationship = await _dbContext.DoctorPatients
             .WhereActive()
             .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (relationship is null)
@@ -284,4 +364,52 @@ public class PatientDoctorService : IPatientDoctorService
 
         return AuthResult<bool>.Success(true);
     }
+
+    private async Task<AuthResult<(DoctorInfo Doctor, Clinic Clinic)>> ValidateDoctorClinicMembershipAsync(
+        Guid doctorId,
+        Guid clinicId,
+        CancellationToken cancellationToken)
+    {
+        var doctor = await (
+            from user in _dbContext.Users.AsNoTracking()
+            join profile in _dbContext.DoctorProfiles.AsNoTracking()
+                on user.Id equals profile.DoctorId into profiles
+            from profile in profiles.DefaultIfEmpty()
+            where user.Id == doctorId
+                && user.Role == UserRole.Doctor
+                && user.IsEnabled
+            select new DoctorInfo(user, profile))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (doctor is null)
+        {
+            return AuthResult<(DoctorInfo, Clinic)>.Failure([DoctorPatientErrors.DoctorNotFound]);
+        }
+
+        var clinic = await _dbContext.Clinics
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ClinicId == clinicId && item.IsEnabled, cancellationToken);
+
+        if (clinic is null)
+        {
+            return AuthResult<(DoctorInfo, Clinic)>.Failure([DoctorPatientErrors.ClinicNotFound]);
+        }
+
+        var isMember = await _dbContext.ClinicDoctors
+            .AsNoTracking()
+            .AnyAsync(
+                membership => membership.ClinicId == clinicId && membership.DoctorId == doctorId,
+                cancellationToken);
+
+        if (!isMember)
+        {
+            return AuthResult<(DoctorInfo, Clinic)>.Failure([DoctorPatientErrors.DoctorNotInClinic]);
+        }
+
+        return AuthResult<(DoctorInfo, Clinic)>.Success((doctor, clinic));
+    }
+
+    private sealed record DoctorInfo(
+        ApplicationUser User,
+        DoctorProfile? Profile);
 }

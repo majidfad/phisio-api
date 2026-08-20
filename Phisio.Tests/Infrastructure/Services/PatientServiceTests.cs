@@ -31,7 +31,7 @@ public class PatientServiceGetPatientsTests
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient(name: "Alice Patient", phoneNumber: "+15551111111");
         var assignedAt = DateTime.UtcNow.AddDays(-5);
-        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id, assignedAt);
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id, createdAt: assignedAt);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
@@ -65,9 +65,9 @@ public class PatientServiceGetPatientsTests
 
         var doctorPatients = new[]
         {
-            DoctorPatientBuilder.Create(doctor.Id, charlie.Id, DateTime.UtcNow.AddDays(-1)),
-            DoctorPatientBuilder.Create(doctor.Id, alice.Id, DateTime.UtcNow.AddDays(-3)),
-            DoctorPatientBuilder.Create(doctor.Id, bob.Id, DateTime.UtcNow.AddDays(-2)),
+            DoctorPatientBuilder.Create(doctor.Id, charlie.Id, createdAt: DateTime.UtcNow.AddDays(-1)),
+            DoctorPatientBuilder.Create(doctor.Id, alice.Id, createdAt: DateTime.UtcNow.AddDays(-3)),
+            DoctorPatientBuilder.Create(doctor.Id, bob.Id, createdAt: DateTime.UtcNow.AddDays(-2)),
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
@@ -146,7 +146,7 @@ public class PatientServiceGetPatientByIdTests
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient(name: "Alice Patient", phoneNumber: "+15551111111");
         var assignedAt = DateTime.UtcNow.AddDays(-5);
-        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id, assignedAt);
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id, createdAt: assignedAt);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],

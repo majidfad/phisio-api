@@ -19,7 +19,9 @@ public sealed record PatientDoctorProfileDto(
     string ClinicAddress,
     string PhoneNumber,
     DoctorPatientStatus? RelationshipStatus,
-    DateTime? RelationshipCreatedAt);
+    DateTime? RelationshipCreatedAt,
+    Guid? ClinicId,
+    string? ClinicName);
 
 public sealed record PatientLinkedDoctorDto(
     Guid DoctorId,
@@ -29,4 +31,6 @@ public sealed record PatientLinkedDoctorDto(
     string ClinicAddress,
     string PhoneNumber,
     DoctorPatientStatus Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    Guid ClinicId,
+    string ClinicName);

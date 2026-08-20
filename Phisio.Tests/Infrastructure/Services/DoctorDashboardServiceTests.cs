@@ -19,10 +19,14 @@ public class DoctorDashboardServiceGetDashboardTests
 
         var doctorPatients = new[]
         {
-            DoctorPatientBuilder.Create(doctor.Id, alice.Id, DateTime.UtcNow.AddDays(-1)),
-            DoctorPatientBuilder.Create(doctor.Id, bob.Id, DateTime.UtcNow.AddDays(-2)),
-            DoctorPatientBuilder.Create(doctor.Id, charlie.Id, DateTime.UtcNow.AddDays(-3)),
-            DoctorPatientBuilder.Create(otherDoctor.Id, alice.Id, DateTime.UtcNow.AddDays(-1), isEnabled: false),
+            DoctorPatientBuilder.Create(doctor.Id, alice.Id, createdAt: DateTime.UtcNow.AddDays(-1)),
+            DoctorPatientBuilder.Create(doctor.Id, bob.Id, createdAt: DateTime.UtcNow.AddDays(-2)),
+            DoctorPatientBuilder.Create(doctor.Id, charlie.Id, createdAt: DateTime.UtcNow.AddDays(-3)),
+            DoctorPatientBuilder.Create(
+                otherDoctor.Id,
+                alice.Id,
+                createdAt: DateTime.UtcNow.AddDays(-1),
+                isEnabled: false),
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
@@ -75,7 +79,7 @@ public class DoctorDashboardServiceGetDashboardTests
             .Select((patient, index) => DoctorPatientBuilder.Create(
                 doctor.Id,
                 patient.Id,
-                DateTime.UtcNow.AddDays(-index)))
+                createdAt: DateTime.UtcNow.AddDays(-index)))
             .ToArray();
 
         var dbContext = AppDbContextMockFactory.CreateMock(
@@ -103,8 +107,12 @@ public class DoctorDashboardServiceGetDashboardTests
 
         var doctorPatients = new[]
         {
-            DoctorPatientBuilder.Create(doctor.Id, activePatient.Id, DateTime.UtcNow.AddDays(-1)),
-            DoctorPatientBuilder.Create(doctor.Id, removedPatient.Id, DateTime.UtcNow.AddDays(-2), isEnabled: false),
+            DoctorPatientBuilder.Create(doctor.Id, activePatient.Id, createdAt: DateTime.UtcNow.AddDays(-1)),
+            DoctorPatientBuilder.Create(
+                doctor.Id,
+                removedPatient.Id,
+                createdAt: DateTime.UtcNow.AddDays(-2),
+                isEnabled: false),
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(

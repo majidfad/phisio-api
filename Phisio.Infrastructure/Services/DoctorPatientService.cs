@@ -47,14 +47,27 @@ public class DoctorPatientService : IDoctorPatientService
                 (dp, u) => new
                 {
                     Patient = u,
-                    Relation = dp
+                    Relation = dp,
+                })
+            .Join(
+                _dbContext.Clinics.AsNoTracking().Where(c => c.IsEnabled),
+                item => item.Relation.ClinicId,
+                clinic => clinic.ClinicId,
+                (item, clinic) => new
+                {
+                    item.Patient,
+                    item.Relation,
+                    Clinic = clinic,
                 })
             .OrderBy(x => x.Patient.Name)
+            .ThenBy(x => x.Clinic.Name)
             .Select(x => new DoctorPatientDto(
                 x.Patient.Id,
                 x.Patient.Name,
                 x.Patient.PhoneNumber ?? string.Empty,
-                x.Relation.CreatedAt))
+                x.Relation.CreatedAt,
+                x.Clinic.ClinicId,
+                x.Clinic.Name))
             .ToListAsync(cancellationToken);
 
         return AuthResult<IReadOnlyList<DoctorPatientDto>>.Success(patients);
@@ -75,12 +88,19 @@ public class DoctorPatientService : IDoctorPatientService
                 dp => dp.PatientId,
                 u => u.Id,
                 (dp, u) => new { Relation = dp, Patient = u })
+            .Join(
+                _dbContext.Clinics.AsNoTracking().Where(c => c.IsEnabled),
+                item => item.Relation.ClinicId,
+                clinic => clinic.ClinicId,
+                (item, clinic) => new { item.Relation, item.Patient, Clinic = clinic })
             .OrderByDescending(x => x.Relation.CreatedAt)
             .Select(x => new DoctorPatientRequestDto(
                 x.Patient.Id,
                 x.Patient.Name,
                 x.Patient.PhoneNumber ?? string.Empty,
-                x.Relation.CreatedAt))
+                x.Relation.CreatedAt,
+                x.Clinic.ClinicId,
+                x.Clinic.Name))
             .ToListAsync(cancellationToken);
 
         return AuthResult<IReadOnlyList<DoctorPatientRequestDto>>.Success(requests);
@@ -89,12 +109,13 @@ public class DoctorPatientService : IDoctorPatientService
     public async Task<AuthResult<DoctorPatientDto>> ApproveRequestAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var relationship = await _dbContext.DoctorPatients
             .WherePending()
             .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (relationship is null)
@@ -126,22 +147,32 @@ public class DoctorPatientService : IDoctorPatientService
             new { doctorId, doctorName },
             cancellationToken);
 
+        var clinicName = await _dbContext.Clinics
+            .AsNoTracking()
+            .Where(clinic => clinic.ClinicId == clinicId)
+            .Select(clinic => clinic.Name)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? string.Empty;
+
         return AuthResult<DoctorPatientDto>.Success(new DoctorPatientDto(
             patient.Id,
             patient.Name,
             patient.PhoneNumber ?? string.Empty,
-            relationship.CreatedAt));
+            relationship.CreatedAt,
+            clinicId,
+            clinicName));
     }
 
     public async Task<AuthResult<bool>> RejectRequestAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var relationship = await _dbContext.DoctorPatients
             .WherePending()
             .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (relationship is null)
@@ -167,12 +198,13 @@ public class DoctorPatientService : IDoctorPatientService
     public async Task<AuthResult<bool>> RemoveAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var relationship = await _dbContext.DoctorPatients
             .WhereActive()
             .FirstOrDefaultAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (relationship is null)

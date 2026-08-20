@@ -66,6 +66,7 @@ public class PatientDoctorsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDoctorProfile(
         Guid doctorId,
+        [FromQuery] Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var patientId = User.GetUserId();
@@ -75,6 +76,35 @@ public class PatientDoctorsController : ControllerBase
         }
 
         var result = await _patientDoctorService.GetDoctorProfileAsync(
+            patientId.Value,
+            doctorId,
+            clinicId,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpGet("{doctorId:guid}/clinics")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientDoctorClinicOptionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDoctorClinics(
+        Guid doctorId,
+        CancellationToken cancellationToken = default)
+    {
+        var patientId = User.GetUserId();
+        if (patientId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _patientDoctorService.GetDoctorClinicsAsync(
             patientId.Value,
             doctorId,
             cancellationToken);
@@ -95,6 +125,7 @@ public class PatientDoctorsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RequestLink(
         Guid doctorId,
+        [FromBody] RequestPatientDoctorLinkDto request,
         CancellationToken cancellationToken = default)
     {
         var patientId = User.GetUserId();
@@ -106,11 +137,13 @@ public class PatientDoctorsController : ControllerBase
         var result = await _patientDoctorService.RequestLinkAsync(
             patientId.Value,
             doctorId,
+            request.ClinicId,
             cancellationToken);
 
         if (!result.Succeeded)
         {
             var statusCode = result.Errors.Contains(DoctorPatientErrors.DoctorNotFound)
+                || result.Errors.Contains(DoctorPatientErrors.ClinicNotFound)
                 ? StatusCodes.Status404NotFound
                 : StatusCodes.Status400BadRequest;
 
@@ -127,6 +160,7 @@ public class PatientDoctorsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelRequest(
         Guid doctorId,
+        [FromQuery] Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var patientId = User.GetUserId();
@@ -138,6 +172,7 @@ public class PatientDoctorsController : ControllerBase
         var result = await _patientDoctorService.CancelRequestAsync(
             patientId.Value,
             doctorId,
+            clinicId,
             cancellationToken);
 
         if (!result.Succeeded)
@@ -155,6 +190,7 @@ public class PatientDoctorsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Unlink(
         Guid doctorId,
+        [FromQuery] Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var patientId = User.GetUserId();
@@ -166,6 +202,7 @@ public class PatientDoctorsController : ControllerBase
         var result = await _patientDoctorService.UnlinkAsync(
             patientId.Value,
             doctorId,
+            clinicId,
             cancellationToken);
 
         if (!result.Succeeded)

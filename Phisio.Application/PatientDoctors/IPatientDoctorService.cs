@@ -13,6 +13,12 @@ public interface IPatientDoctorService
     Task<AuthResult<PatientDoctorProfileDto>> GetDoctorProfileAsync(
         Guid patientId,
         Guid doctorId,
+        Guid? clinicId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<IReadOnlyList<PatientDoctorClinicOptionDto>>> GetDoctorClinicsAsync(
+        Guid patientId,
+        Guid doctorId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<IReadOnlyList<PatientLinkedDoctorDto>>> GetMyDoctorsAsync(
@@ -22,15 +28,18 @@ public interface IPatientDoctorService
     Task<AuthResult<PatientLinkedDoctorDto>> RequestLinkAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<bool>> CancelRequestAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<bool>> UnlinkAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 }

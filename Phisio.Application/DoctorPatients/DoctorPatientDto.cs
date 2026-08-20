@@ -4,4 +4,6 @@ public sealed record DoctorPatientDto(
     Guid PatientId,
     string PatientName,
     string PhoneNumber,
-    DateTime AssignedAt);
+    DateTime AssignedAt,
+    Guid ClinicId,
+    string ClinicName);

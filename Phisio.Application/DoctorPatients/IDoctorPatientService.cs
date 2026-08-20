@@ -15,16 +15,19 @@ public interface IDoctorPatientService
     Task<AuthResult<DoctorPatientDto>> ApproveRequestAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<bool>> RejectRequestAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<bool>> RemoveAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<IReadOnlyList<DoctorPatientExerciseDto>>> GetPatientExercisesAsync(

@@ -11,6 +11,8 @@ public static class DoctorPatientErrors
     public const string AlreadyApproved = "اتصال با این پزشک قبلاً تأیید شده است";
     public const string NotPending = "درخواست در وضعیت در انتظار نیست";
     public const string NotApproved = "اتصال تأییدشده‌ای یافت نشد";
+    public const string ClinicNotFound = "مطب یافت نشد";
+    public const string DoctorNotInClinic = "پزشک در این مطب عضو نیست";
     public const string NoExercisesSelected = "حداقل یک تمرین باید انتخاب شود";
     public const string NoDatesSelected = "حداقل یک تاریخ باید انتخاب شود";
     public const string NoValidExercises = "تمرین معتبری یافت نشد";

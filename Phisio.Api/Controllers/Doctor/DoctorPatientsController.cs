@@ -58,6 +58,7 @@ public class DoctorPatientsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ApproveRequest(
         Guid patientId,
+        [FromQuery] Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var doctorId = User.GetUserId();
@@ -69,6 +70,7 @@ public class DoctorPatientsController : ControllerBase
         var result = await _doctorPatientService.ApproveRequestAsync(
             doctorId.Value,
             patientId,
+            clinicId,
             cancellationToken);
 
         if (!result.Succeeded)
@@ -91,6 +93,7 @@ public class DoctorPatientsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RejectRequest(
         Guid patientId,
+        [FromQuery] Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var doctorId = User.GetUserId();
@@ -102,6 +105,7 @@ public class DoctorPatientsController : ControllerBase
         var result = await _doctorPatientService.RejectRequestAsync(
             doctorId.Value,
             patientId,
+            clinicId,
             cancellationToken);
 
         if (!result.Succeeded)
@@ -119,6 +123,7 @@ public class DoctorPatientsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemovePatient(
         Guid patientId,
+        [FromQuery] Guid clinicId,
         CancellationToken cancellationToken = default)
     {
         var doctorId = User.GetUserId();
@@ -127,7 +132,11 @@ public class DoctorPatientsController : ControllerBase
             return Unauthorized();
         }
 
-        var result = await _doctorPatientService.RemoveAsync(doctorId.Value, patientId, cancellationToken);
+        var result = await _doctorPatientService.RemoveAsync(
+            doctorId.Value,
+            patientId,
+            clinicId,
+            cancellationToken);
 
         if (!result.Succeeded)
         {

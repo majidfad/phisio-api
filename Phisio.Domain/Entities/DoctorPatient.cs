@@ -13,5 +13,9 @@ public class DoctorPatient : BaseEntity
 
     public Guid PatientId { get; set; }
 
+    public Guid ClinicId { get; set; }
+
+    public Clinic Clinic { get; set; } = null!;
+
     public DoctorPatientStatus Status { get; set; } = DoctorPatientStatus.Pending;
 }
