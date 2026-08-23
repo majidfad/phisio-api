@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Phisio.Api.Controllers;
 using Phisio.Application.Auth;
+using Phisio.Application.Clinics;
 
 namespace Phisio.Tests.Api.Controllers;
 
@@ -11,9 +12,12 @@ internal static class AuthControllerTestHelper
 {
     public static AuthController CreateController(
         Mock<IAuthService> authService,
+        Mock<IClinicService>? clinicService = null,
         ClaimsPrincipal? user = null)
     {
-        var controller = new AuthController(authService.Object)
+        var controller = new AuthController(
+            authService.Object,
+            (clinicService ?? new Mock<IClinicService>()).Object)
         {
             ControllerContext = new ControllerContext
             {

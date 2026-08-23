@@ -24,4 +24,10 @@ public static class ClinicErrors
     public const string DoctorCannotBeAssigned = "The specified user cannot be assigned as a clinic doctor.";
 
     public const string CannotRemoveClinicManager = "The clinic manager cannot be removed from the clinic.";
+
+    public const string ConflictingClinicPhones =
+        "The entered phone numbers belong to different clinics. Correct the numbers and try again.";
+
+    public const string ClinicCreateDetailsRequired =
+        "Clinic name and address are required when no existing clinic matches the phone numbers.";
 }

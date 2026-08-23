@@ -280,6 +280,222 @@ public class ClinicService : IClinicService
         return AuthResult<bool>.Success(true);
     }
 
+    public async Task<AuthResult<ClinicPhoneLookupResultDto>> LookupByPhonesAsync(
+        ClinicAccessContext access,
+        LookupClinicsByPhonesDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var phonesResult = NormalizeSubmittedPhones(request.PhoneNumbers);
+        if (!phonesResult.Succeeded)
+        {
+            return AuthResult<ClinicPhoneLookupResultDto>.Failure(phonesResult.Errors);
+        }
+
+        var matches = await FindClinicsByNormalizedPhonesAsync(
+            access,
+            phonesResult.Value!,
+            cancellationToken);
+
+        if (matches.Count == 0)
+        {
+            return AuthResult<ClinicPhoneLookupResultDto>.Success(
+                new ClinicPhoneLookupResultDto(ClinicPhoneLookupStatus.None, null, []));
+        }
+
+        if (matches.Count > 1)
+        {
+            return AuthResult<ClinicPhoneLookupResultDto>.Success(
+                new ClinicPhoneLookupResultDto(
+                    ClinicPhoneLookupStatus.Conflict,
+                    null,
+                    matches.Select(MapToDto).ToList()));
+        }
+
+        return AuthResult<ClinicPhoneLookupResultDto>.Success(
+            new ClinicPhoneLookupResultDto(
+                ClinicPhoneLookupStatus.Found,
+                MapToDto(matches[0]),
+                []));
+    }
+
+    public async Task<AuthResult<AssignDoctorToClinicResultDto>> AssignDoctorAsync(
+        ClinicAccessContext access,
+        AssignDoctorToClinicDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var doctor = await _dbContext.Users
+            .ApplyIncludeDisabled(request.AllowDisabledDoctor)
+            .FirstOrDefaultAsync(user => user.Id == request.DoctorId, cancellationToken);
+
+        if (doctor is null || (!request.AllowDisabledDoctor && !doctor.IsEnabled))
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure([ClinicErrors.DoctorNotFound]);
+        }
+
+        if (!doctor.Role.HasDoctorAccess())
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure(
+                [ClinicErrors.DoctorCannotBeAssigned]);
+        }
+
+        var phonesResult = NormalizeSubmittedPhones(request.PhoneNumbers);
+        if (!phonesResult.Succeeded)
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure(phonesResult.Errors);
+        }
+
+        var matches = await FindClinicsByNormalizedPhonesAsync(
+            access,
+            phonesResult.Value!,
+            cancellationToken);
+
+        if (matches.Count > 1)
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure(
+                [ClinicErrors.ConflictingClinicPhones]);
+        }
+
+        if (matches.Count == 1)
+        {
+            var existingClinic = matches[0];
+            var memberResult = await EnsureDoctorMembershipAsync(
+                existingClinic,
+                doctor,
+                cancellationToken);
+
+            if (!memberResult.Succeeded)
+            {
+                return AuthResult<AssignDoctorToClinicResultDto>.Failure(memberResult.Errors);
+            }
+
+            return AuthResult<AssignDoctorToClinicResultDto>.Success(
+                new AssignDoctorToClinicResultDto(
+                    MapToDto(existingClinic),
+                    memberResult.Value!,
+                    ClinicCreated: false));
+        }
+
+        var name = request.Name?.Trim() ?? string.Empty;
+        var address = request.Address?.Trim() ?? string.Empty;
+        if (name.Length == 0 || address.Length == 0)
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure(
+                [ClinicErrors.ClinicCreateDetailsRequired]);
+        }
+
+        var managerId = request.ManagerIsThisDoctor
+            ? request.DoctorId
+            : request.ClinicManagerId;
+
+        var createResult = await CreateAsync(
+            access,
+            new CreateClinicDto
+            {
+                Name = name,
+                Address = address,
+                PhoneNumbers = phonesResult.Value!.Select(phone => phone.Display).ToList(),
+                ClinicManagerId = managerId,
+            },
+            cancellationToken);
+
+        if (!createResult.Succeeded)
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure(createResult.Errors);
+        }
+
+        var createdClinic = await _dbContext.Clinics
+            .Include(clinic => clinic.PhoneNumbers)
+            .FirstAsync(clinic => clinic.ClinicId == createResult.Value!.ClinicId, cancellationToken);
+
+        var createdMemberResult = await EnsureDoctorMembershipAsync(
+            createdClinic,
+            doctor,
+            cancellationToken);
+
+        if (!createdMemberResult.Succeeded)
+        {
+            return AuthResult<AssignDoctorToClinicResultDto>.Failure(createdMemberResult.Errors);
+        }
+
+        return AuthResult<AssignDoctorToClinicResultDto>.Success(
+            new AssignDoctorToClinicResultDto(
+                MapToDto(createdClinic),
+                createdMemberResult.Value!,
+                ClinicCreated: true));
+    }
+
+    private async Task<AuthResult<ClinicDoctorMemberDto>> EnsureDoctorMembershipAsync(
+        Clinic clinic,
+        ApplicationUser doctor,
+        CancellationToken cancellationToken)
+    {
+        var alreadyAssigned = await _dbContext.ClinicDoctors
+            .AnyAsync(
+                link => link.ClinicId == clinic.ClinicId && link.DoctorId == doctor.Id,
+                cancellationToken);
+
+        if (!alreadyAssigned)
+        {
+            _dbContext.ClinicDoctors.Add(new ClinicDoctor
+            {
+                ClinicId = clinic.ClinicId,
+                DoctorId = doctor.Id,
+            });
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var profile = await _dbContext.DoctorProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.DoctorId == doctor.Id, cancellationToken);
+
+        return AuthResult<ClinicDoctorMemberDto>.Success(
+            MapToDoctorMemberDto(doctor, profile, clinic.ClinicManagerId));
+    }
+
+    private async Task<IReadOnlyList<Clinic>> FindClinicsByNormalizedPhonesAsync(
+        ClinicAccessContext access,
+        IReadOnlyList<NormalizedClinicPhone> phones,
+        CancellationToken cancellationToken)
+    {
+        var normalizedValues = phones.Select(phone => phone.Normalized).ToList();
+
+        var clinicIds = await _dbContext.ClinicPhoneNumbers
+            .AsNoTracking()
+            .Where(phone => normalizedValues.Contains(phone.NormalizedPhoneNumber))
+            .Select(phone => phone.ClinicId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (clinicIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await ApplyAccessFilter(_dbContext.Clinics, access)
+            .Include(clinic => clinic.PhoneNumbers)
+            .Where(clinic => clinicIds.Contains(clinic.ClinicId) && clinic.IsEnabled)
+            .OrderBy(clinic => clinic.Name)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static AuthResult<IReadOnlyList<NormalizedClinicPhone>> NormalizeSubmittedPhones(
+        IEnumerable<string> phoneNumbers)
+    {
+        var normalizedPhoneNumbers = phoneNumbers
+            .Select(phoneNumber => new NormalizedClinicPhone(
+                phoneNumber.Trim(),
+                PhoneNumberNormalizer.Normalize(phoneNumber)))
+            .Where(phoneNumber => phoneNumber.Normalized.Length > 0)
+            .GroupBy(phoneNumber => phoneNumber.Normalized)
+            .Select(group => group.First())
+            .ToList();
+
+        return normalizedPhoneNumbers.Count == 0
+            ? AuthResult<IReadOnlyList<NormalizedClinicPhone>>.Failure(
+                [ClinicErrors.PhoneNumberRequired])
+            : AuthResult<IReadOnlyList<NormalizedClinicPhone>>.Success(normalizedPhoneNumbers);
+    }
+
     private async Task<Clinic?> FindAccessibleClinicAsync(
         ClinicAccessContext access,
         Guid clinicId,
@@ -394,21 +610,13 @@ public class ClinicService : IClinicService
         Guid? excludedClinicId,
         CancellationToken cancellationToken)
     {
-        var normalizedPhoneNumbers = phoneNumbers
-            .Select(phoneNumber => new NormalizedClinicPhone(
-                phoneNumber.Trim(),
-                PhoneNumberNormalizer.Normalize(phoneNumber)))
-            .Where(phoneNumber => phoneNumber.Normalized.Length > 0)
-            .GroupBy(phoneNumber => phoneNumber.Normalized)
-            .Select(group => group.First())
-            .ToList();
-
-        if (normalizedPhoneNumbers.Count == 0)
+        var normalizedResult = NormalizeSubmittedPhones(phoneNumbers);
+        if (!normalizedResult.Succeeded)
         {
-            return AuthResult<IReadOnlyList<NormalizedClinicPhone>>.Failure(
-                [ClinicErrors.PhoneNumberRequired]);
+            return normalizedResult;
         }
 
+        var normalizedPhoneNumbers = normalizedResult.Value!;
         var normalizedValues = normalizedPhoneNumbers
             .Select(phoneNumber => phoneNumber.Normalized)
             .ToList();

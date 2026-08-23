@@ -36,7 +36,7 @@ public class AuthServiceChangePasswordTests
                 manager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword))
             .ReturnsAsync(IdentityResult.Success);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.ChangePasswordAsync(user.Id, request);
@@ -61,7 +61,7 @@ public class AuthServiceChangePasswordTests
         var userManager = IdentityMockFactory.CreateUserManager();
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var jwtTokenService = JwtTokenServiceMockFactory.Create();
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.ChangePasswordAsync(Guid.NewGuid(), request);
@@ -91,7 +91,7 @@ public class AuthServiceChangePasswordTests
         var userManager = IdentityMockFactory.CreateUserManager();
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var jwtTokenService = JwtTokenServiceMockFactory.Create();
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.ChangePasswordAsync(Guid.NewGuid(), request);
@@ -120,7 +120,7 @@ public class AuthServiceChangePasswordTests
         userManager.Setup(manager => manager.FindByIdAsync(userId.ToString()))
             .ReturnsAsync((ApplicationUser?)null);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.ChangePasswordAsync(userId, request);
@@ -152,7 +152,7 @@ public class AuthServiceChangePasswordTests
                 Description = "Incorrect password."
             }));
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.ChangePasswordAsync(user.Id, request);

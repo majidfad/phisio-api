@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Phisio.Application.Auth;
+using Phisio.Application.Clinics;
+using Phisio.Application.Common;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Authentication;
 using Phisio.Infrastructure.Identity;
@@ -31,7 +34,7 @@ public class AuthServiceRegisterTests
         userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Patient)))
             .ReturnsAsync(IdentityResult.Success);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -71,7 +74,7 @@ public class AuthServiceRegisterTests
         roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Patient)))
             .ReturnsAsync(true);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -95,7 +98,7 @@ public class AuthServiceRegisterTests
         var userManager = IdentityMockFactory.CreateUserManager();
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var jwtTokenService = JwtTokenServiceMockFactory.Create();
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -126,7 +129,7 @@ public class AuthServiceRegisterTests
             .ReturnsAsync(IdentityResult.Failed(
                 new IdentityError { Code = "PasswordTooShort", Description = "Passwords must be at least 8 characters." }));
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -156,7 +159,7 @@ public class AuthServiceRegisterTests
         roleManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationRole>()))
             .ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Invalid role." }));
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var act = () => sut.RegisterAsync(request);
@@ -186,7 +189,7 @@ public class AuthServiceRegisterTests
         userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Patient)))
             .ReturnsAsync(IdentityResult.Success);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -216,7 +219,7 @@ public class AuthServiceRegisterTests
         userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Doctor)))
             .ReturnsAsync(IdentityResult.Success);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -231,14 +234,71 @@ public class AuthServiceRegisterTests
         createdUser.IsEnabled.Should().BeFalse();
         createdUser.UserName.Should().Be(UserCredentials.NormalizePhone(request.PhoneNumber));
 
-        createdUser.DoctorProfile.Should().NotBeNull();
-        createdUser.DoctorProfile!.DoctorId.Should().Be(createdUser.Id);
-        createdUser.DoctorProfile.MedicalLicenseNumber.Should().Be(request.MedicalLicenseNumber);
-        createdUser.DoctorProfile.Specialty.Should().Be(request.Specialty);
-        createdUser.DoctorProfile.IsEnabled.Should().BeFalse();
-
         userManager.Verify(
             manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Doctor)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WhenDoctorClinicAssignmentFails_RollsBackProfileBeforeUser()
+    {
+        // Arrange
+        var request = RegisterRequestBuilder.ValidDoctor();
+        var dbContext = AppDbContextMockFactory.Create();
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var jwtTokenService = JwtTokenServiceMockFactory.Create();
+        var clinicService = AuthServiceTestHelper.CreateClinicServiceMock();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+
+        userManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), request.Password))
+            .Callback<ApplicationUser, string>((user, _) =>
+            {
+                dbContext.Users.Add(user);
+                dbContext.SaveChanges();
+            })
+            .ReturnsAsync(IdentityResult.Success);
+
+        userManager.Setup(manager => manager.AddToRoleAsync(
+                It.IsAny<ApplicationUser>(),
+                nameof(UserRole.Doctor)))
+            .ReturnsAsync(IdentityResult.Success);
+
+        userManager.Setup(manager => manager.DeleteAsync(It.IsAny<ApplicationUser>()))
+            .Callback<ApplicationUser>(user =>
+            {
+                dbContext.Users.Remove(user);
+                dbContext.SaveChanges();
+            })
+            .ReturnsAsync(IdentityResult.Success);
+
+        clinicService
+            .Setup(service => service.AssignDoctorAsync(
+                It.IsAny<ClinicAccessContext>(),
+                It.IsAny<AssignDoctorToClinicDto>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<AssignDoctorToClinicResultDto>.Failure(
+                ["Clinic assignment failed."]));
+
+        var sut = AuthServiceTestHelper.Create(
+            userManager.Object,
+            roleManager.Object,
+            jwtTokenService.Object,
+            clinicService,
+            dbContext);
+
+        // Act
+        var result = await sut.RegisterAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle("Clinic assignment failed.");
+        dbContext.DoctorProfiles.IgnoreQueryFilters().Should().BeEmpty();
+        dbContext.Users.Should().BeEmpty();
+        userManager.Verify(
+            manager => manager.DeleteAsync(It.IsAny<ApplicationUser>()),
             Times.Once);
     }
 
@@ -252,7 +312,7 @@ public class AuthServiceRegisterTests
         var userManager = IdentityMockFactory.CreateUserManager();
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var jwtTokenService = JwtTokenServiceMockFactory.Create();
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -277,7 +337,7 @@ public class AuthServiceRegisterTests
         var userManager = IdentityMockFactory.CreateUserManager();
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var jwtTokenService = JwtTokenServiceMockFactory.Create();
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -307,7 +367,7 @@ public class AuthServiceRegisterTests
         roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
             .ReturnsAsync(true);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var result = await sut.RegisterAsync(request);
@@ -351,7 +411,7 @@ public class AuthServiceRegisterTests
         userManager.Setup(manager => manager.GetRolesAsync(It.IsAny<ApplicationUser>()))
             .ReturnsAsync(["Patient"]);
 
-        var sut = new AuthService(userManager.Object, roleManager.Object, jwtTokenService.Object);
+        var sut = AuthServiceTestHelper.Create(userManager.Object, roleManager.Object, jwtTokenService.Object);
 
         // Act
         var registerResult = await sut.RegisterAsync(request);

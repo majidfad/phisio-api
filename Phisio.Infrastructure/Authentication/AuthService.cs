@@ -1,31 +1,39 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Auth;
+using Phisio.Application.Clinics;
 using Phisio.Application.Common;
 using Phisio.Application.Notifications;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
+using Phisio.Infrastructure.Persistence;
 using Phisio.Infrastructure.Services;
 
 namespace Phisio.Infrastructure.Authentication;
 
 public class AuthService : IAuthService
 {
+    private readonly AppDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IClinicService _clinicService;
     private readonly INotificationService _notifications;
 
     public AuthService(
+        AppDbContext dbContext,
         UserManager<ApplicationUser> userManager,
         RoleManager<ApplicationRole> roleManager,
         IJwtTokenService jwtTokenService,
+        IClinicService clinicService,
         INotificationService? notifications = null)
     {
+        _dbContext = dbContext;
         _userManager = userManager;
         _roleManager = roleManager;
         _jwtTokenService = jwtTokenService;
+        _clinicService = clinicService;
         _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
@@ -241,6 +249,45 @@ public class AuthService : IAuthService
             return AuthResult<RegisterResponse>.Failure([validationError]);
         }
 
+        var adminAccess = new ClinicAccessContext(Guid.Empty, IsAdmin: true);
+        var clinicLookup = await _clinicService.LookupByPhonesAsync(
+            adminAccess,
+            new LookupClinicsByPhonesDto { PhoneNumbers = request.ClinicPhoneNumbers },
+            cancellationToken);
+
+        if (!clinicLookup.Succeeded)
+        {
+            return AuthResult<RegisterResponse>.Failure(clinicLookup.Errors);
+        }
+
+        if (clinicLookup.Value!.Status == ClinicPhoneLookupStatus.Conflict)
+        {
+            return AuthResult<RegisterResponse>.Failure([ClinicErrors.ConflictingClinicPhones]);
+        }
+
+        var creatingNewClinic = clinicLookup.Value.Status == ClinicPhoneLookupStatus.None;
+        if (creatingNewClinic)
+        {
+            if (string.IsNullOrWhiteSpace(request.NewClinicName)
+                || string.IsNullOrWhiteSpace(request.NewClinicAddress))
+            {
+                return AuthResult<RegisterResponse>.Failure(
+                    [ClinicErrors.ClinicCreateDetailsRequired]);
+            }
+
+            if (!request.ManagerIsThisDoctor)
+            {
+                return AuthResult<RegisterResponse>.Failure([ClinicErrors.ManagerIdRequired]);
+            }
+        }
+
+        var profileAddress = ResolveClinicAddressForProfile(request, clinicLookup.Value);
+        if (string.IsNullOrWhiteSpace(profileAddress))
+        {
+            return AuthResult<RegisterResponse>.Failure(
+                [ClinicErrors.ClinicCreateDetailsRequired]);
+        }
+
         // Doctors stay disabled until an administrator approves them.
         var user = new ApplicationUser
         {
@@ -253,18 +300,6 @@ public class AuthService : IAuthService
 
         UserCredentials.Apply(user, request.PhoneNumber, email: null);
 
-        // Persisted together with the user by the Identity EF store.
-        user.DoctorProfile = new DoctorProfile
-        {
-            DoctorProfileId = Guid.NewGuid(),
-            DoctorId = user.Id,
-            Specialty = request.Specialty?.Trim() ?? string.Empty,
-            MedicalLicenseNumber = request.MedicalLicenseNumber?.Trim() ?? string.Empty,
-            ClinicAddress = string.Empty,
-            CreatedAt = DateTime.UtcNow,
-            IsEnabled = false
-        };
-
         var createResult = await _userManager.CreateAsync(user, request.Password);
         if (!createResult.Succeeded)
         {
@@ -275,9 +310,50 @@ public class AuthService : IAuthService
         var addRoleResult = await _userManager.AddToRoleAsync(user, nameof(UserRole.Doctor));
         if (!addRoleResult.Succeeded)
         {
-            await _userManager.DeleteAsync(user);
+            await DeleteRegisteredDoctorAsync(user, cancellationToken);
             return AuthResult<RegisterResponse>.Failure(
                 IdentityErrorLocalizer.Localize(addRoleResult.Errors));
+        }
+
+        var profile = new DoctorProfile
+        {
+            DoctorProfileId = Guid.NewGuid(),
+            DoctorId = user.Id,
+            Specialty = request.Specialty?.Trim() ?? string.Empty,
+            MedicalLicenseNumber = request.MedicalLicenseNumber?.Trim() ?? string.Empty,
+            ClinicAddress = profileAddress,
+            CreatedAt = DateTime.UtcNow,
+            IsEnabled = false,
+        };
+        _dbContext.DoctorProfiles.Add(profile);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var assignResult = await _clinicService.AssignDoctorAsync(
+                adminAccess,
+                new AssignDoctorToClinicDto
+                {
+                    DoctorId = user.Id,
+                    PhoneNumbers = request.ClinicPhoneNumbers,
+                    Name = request.NewClinicName,
+                    Address = request.NewClinicAddress,
+                    ManagerIsThisDoctor = request.ManagerIsThisDoctor,
+                    AllowDisabledDoctor = true,
+                },
+                cancellationToken);
+
+            if (!assignResult.Succeeded)
+            {
+                await DeleteRegisteredDoctorAsync(user, cancellationToken);
+                return AuthResult<RegisterResponse>.Failure(assignResult.Errors);
+            }
+        }
+        catch
+        {
+            await DeleteRegisteredDoctorAsync(user, cancellationToken);
+            throw;
         }
 
         var adminIds = await _userManager.Users
@@ -304,6 +380,59 @@ public class AuthService : IAuthService
                 user.Name,
                 user.Role,
                 RegisterMessages.DoctorRegistered));
+    }
+
+    private static string ResolveClinicAddressForProfile(
+        RegisterRequest request,
+        ClinicPhoneLookupResultDto clinicLookup)
+    {
+        if (clinicLookup.Status == ClinicPhoneLookupStatus.Found
+            && clinicLookup.Clinic is not null)
+        {
+            return clinicLookup.Clinic.Address;
+        }
+
+        return request.NewClinicAddress?.Trim() ?? string.Empty;
+    }
+
+    private async Task DeleteRegisteredDoctorAsync(
+        ApplicationUser user,
+        CancellationToken cancellationToken)
+    {
+        // Clinic assignment uses this same scoped context and may leave the user,
+        // profile, and clinic entities connected in the change tracker. With the
+        // required User-DoctorProfile relationship configured as Restrict,
+        // removing the tracked profile can otherwise be interpreted as severing
+        // a required relationship (a conceptual null) instead of an explicit
+        // dependent delete.
+        _dbContext.ChangeTracker.Clear();
+
+        var clinicLinks = await _dbContext.ClinicDoctors
+            .Where(link => link.DoctorId == user.Id)
+            .ToListAsync(cancellationToken);
+
+        if (clinicLinks.Count > 0)
+        {
+            _dbContext.ClinicDoctors.RemoveRange(clinicLinks);
+        }
+
+        var profile = await _dbContext.DoctorProfiles
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(item => item.DoctorId == user.Id, cancellationToken);
+
+        if (profile is not null)
+        {
+            _dbContext.DoctorProfiles.Remove(profile);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // The detached user instance still carries the old navigation reference.
+        // Clear it before UserManager reattaches the user for deletion; otherwise
+        // EF traverses that stale profile and recreates the required-relationship
+        // conceptual-null error.
+        user.DoctorProfile = null;
+        await _userManager.DeleteAsync(user);
     }
 
     private async Task<ApplicationUser?> FindUserByPhoneAsync(

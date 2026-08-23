@@ -151,7 +151,7 @@ public class AuthControllerMeTests
 
         var controller = AuthControllerTestHelper.CreateController(
             authService,
-            AuthControllerTestHelper.CreateAuthenticatedUser(userId));
+            user: AuthControllerTestHelper.CreateAuthenticatedUser(userId));
 
         // Act
         var result = await controller.Me(CancellationToken.None);
@@ -169,7 +169,7 @@ public class AuthControllerMeTests
         var authService = new Mock<IAuthService>();
         var controller = AuthControllerTestHelper.CreateController(
             authService,
-            AuthControllerTestHelper.CreateUserWithInvalidIdClaim());
+            user: AuthControllerTestHelper.CreateUserWithInvalidIdClaim());
 
         // Act
         var result = await controller.Me(CancellationToken.None);
@@ -195,7 +195,7 @@ public class AuthControllerMeTests
 
         var controller = AuthControllerTestHelper.CreateController(
             authService,
-            AuthControllerTestHelper.CreateAuthenticatedUser(userId));
+            user: AuthControllerTestHelper.CreateAuthenticatedUser(userId));
 
         // Act
         var result = await controller.Me(CancellationToken.None);

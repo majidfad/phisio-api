@@ -46,4 +46,14 @@ public interface IClinicService
         Guid clinicId,
         Guid doctorId,
         CancellationToken cancellationToken = default);
+
+    Task<AuthResult<ClinicPhoneLookupResultDto>> LookupByPhonesAsync(
+        ClinicAccessContext access,
+        LookupClinicsByPhonesDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResult<AssignDoctorToClinicResultDto>> AssignDoctorAsync(
+        ClinicAccessContext access,
+        AssignDoctorToClinicDto request,
+        CancellationToken cancellationToken = default);
 }

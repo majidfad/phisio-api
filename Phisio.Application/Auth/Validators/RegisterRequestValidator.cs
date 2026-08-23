@@ -37,6 +37,16 @@ public class RegisterRequestValidator : AbstractValidator<RegisterRequest>
             RuleFor(x => x.Specialty)
                 .NotEmpty().WithMessage("تخصص الزامی است.")
                 .MaximumLength(200).WithMessage("تخصص حداکثر ۲۰۰ کاراکتر باشد.");
+
+            RuleFor(x => x.ClinicPhoneNumbers)
+                .NotEmpty()
+                .WithMessage("حداقل یک شماره تلفن مطب الزامی است.");
+
+            RuleForEach(x => x.ClinicPhoneNumbers)
+                .NotEmpty()
+                .MaximumLength(20)
+                .Matches(@"^\+?[0-9\s\-()]+$")
+                .WithMessage("فرمت شماره تلفن مطب نامعتبر است.");
         });
     }
 }

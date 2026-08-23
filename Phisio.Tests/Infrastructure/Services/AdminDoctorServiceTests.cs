@@ -3,14 +3,72 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Phisio.Application.Admin.Doctors;
+using Phisio.Application.Clinics;
+using Phisio.Application.Common;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
+using Phisio.Infrastructure.Persistence;
 using Phisio.Infrastructure.Services;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
 using Phisio.Tests.TestHelpers;
 
 namespace Phisio.Tests.Infrastructure.Services;
+
+internal static class AdminDoctorServiceTestHelper
+{
+    public static Mock<IClinicService> CreateClinicServiceMock()
+    {
+        var clinicService = new Mock<IClinicService>();
+        clinicService
+            .Setup(service => service.LookupByPhonesAsync(
+                It.IsAny<ClinicAccessContext>(),
+                It.IsAny<LookupClinicsByPhonesDto>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<ClinicPhoneLookupResultDto>.Success(
+                new ClinicPhoneLookupResultDto(ClinicPhoneLookupStatus.None, null, [])));
+
+        clinicService
+            .Setup(service => service.AssignDoctorAsync(
+                It.IsAny<ClinicAccessContext>(),
+                It.IsAny<AssignDoctorToClinicDto>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((
+                ClinicAccessContext _,
+                AssignDoctorToClinicDto request,
+                CancellationToken _) =>
+                Task.FromResult(AuthResult<AssignDoctorToClinicResultDto>.Success(
+                    new AssignDoctorToClinicResultDto(
+                        new ClinicDto(
+                            Guid.NewGuid(),
+                            request.Name ?? "Clinic",
+                            request.Address ?? "Address",
+                            request.DoctorId,
+                            request.PhoneNumbers.ToList(),
+                            DateTime.UtcNow),
+                        new ClinicDoctorMemberDto(
+                            request.DoctorId,
+                            "Doctor",
+                            "+15550000000",
+                            UserRole.Doctor,
+                            "Specialty",
+                            IsClinicManager: true),
+                        ClinicCreated: true))));
+
+        return clinicService;
+    }
+
+    public static AdminDoctorService Create(
+        AppDbContext dbContext,
+        UserManager<ApplicationUser> userManager,
+        RoleManager<ApplicationRole> roleManager,
+        Mock<IClinicService>? clinicService = null) =>
+        new(
+            dbContext,
+            userManager,
+            roleManager,
+            (clinicService ?? CreateClinicServiceMock()).Object);
+}
 
 public class AdminDoctorServiceGetAllTests
 {
@@ -23,7 +81,7 @@ public class AdminDoctorServiceGetAllTests
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var dbContext = AppDbContextMockFactory.Create();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.GetAllAsync();
@@ -54,7 +112,7 @@ public class AdminDoctorServiceGetAllTests
             users: [charlie, alice],
             doctorProfiles: [aliceProfile]).Object;
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.GetAllAsync();
@@ -108,7 +166,7 @@ public class AdminDoctorServiceGetAllTests
         dbContext.Clinics.AddRange(northClinic, southClinic);
         await dbContext.SaveChangesAsync();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         var result = await sut.GetAllAsync();
 
@@ -138,7 +196,7 @@ public class AdminDoctorServiceGetByIdTests
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var dbContext = AppDbContextMockFactory.CreateMock(doctorProfiles: [profile]).Object;
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.GetByIdAsync(doctor.Id);
@@ -158,7 +216,7 @@ public class AdminDoctorServiceGetByIdTests
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var dbContext = AppDbContextMockFactory.Create();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.GetByIdAsync(Guid.NewGuid());
@@ -188,7 +246,7 @@ public class AdminDoctorServiceCreateTests
         userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Doctor)))
             .ReturnsAsync(IdentityResult.Success);
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.CreateAsync(request);
@@ -200,7 +258,7 @@ public class AdminDoctorServiceCreateTests
         result.Value.Doctor.PhoneNumber.Should().Be(request.PhoneNumber);
         result.Value.Doctor.Specialty.Should().Be(request.Specialty);
         result.Value.Doctor.MedicalLicenseNumber.Should().Be(request.MedicalLicenseNumber);
-        result.Value.Doctor.ClinicAddress.Should().Be(request.ClinicAddress);
+        result.Value.Doctor.ClinicAddress.Should().Be(request.NewClinicAddress);
         result.Value.GeneratedPassword.Should().NotBeNullOrWhiteSpace();
 
         var savedProfile = await dbContext.DoctorProfiles.SingleAsync();
@@ -222,7 +280,7 @@ public class AdminDoctorServiceCreateTests
         roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
             .ReturnsAsync(true);
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.CreateAsync(request);
@@ -231,6 +289,102 @@ public class AdminDoctorServiceCreateTests
         result.Succeeded.Should().BeFalse();
         result.Errors.Should().ContainSingle()
             .Which.Should().Be("Phone number is already registered.");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenClinicPhonesConflict_ReturnsFailureWithoutCreatingDoctor()
+    {
+        // Arrange
+        var request = DoctorTestDataBuilder.CreateDto();
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var dbContext = AppDbContextMockFactory.Create();
+        var clinicService = AdminDoctorServiceTestHelper.CreateClinicServiceMock();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+        clinicService
+            .Setup(service => service.LookupByPhonesAsync(
+                It.IsAny<ClinicAccessContext>(),
+                It.IsAny<LookupClinicsByPhonesDto>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<ClinicPhoneLookupResultDto>.Success(
+                new ClinicPhoneLookupResultDto(ClinicPhoneLookupStatus.Conflict, null, [])));
+
+        var sut = AdminDoctorServiceTestHelper.Create(
+            dbContext,
+            userManager.Object,
+            roleManager.Object,
+            clinicService);
+
+        // Act
+        var result = await sut.CreateAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().Contain(ClinicErrors.ConflictingClinicPhones);
+        userManager.Verify(
+            manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenClinicExists_AssignsDoctorToExistingClinic()
+    {
+        // Arrange
+        var request = DoctorTestDataBuilder.CreateDto();
+        request.NewClinicName = null;
+        request.NewClinicAddress = null;
+        request.ManagerIsThisDoctor = false;
+
+        var existingClinic = new ClinicDto(
+            Guid.NewGuid(),
+            "Vanak Clinic",
+            "Vanak St",
+            Guid.NewGuid(),
+            ["02112345678"],
+            DateTime.UtcNow);
+
+        var userManager = IdentityMockFactory.CreateUserManager();
+        var roleManager = IdentityMockFactory.CreateRoleManager();
+        var dbContext = AppDbContextMockFactory.Create();
+        var clinicService = AdminDoctorServiceTestHelper.CreateClinicServiceMock();
+
+        roleManager.Setup(manager => manager.RoleExistsAsync(nameof(UserRole.Doctor)))
+            .ReturnsAsync(true);
+        userManager.Setup(manager => manager.CreateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()))
+            .ReturnsAsync(IdentityResult.Success);
+        userManager.Setup(manager => manager.AddToRoleAsync(It.IsAny<ApplicationUser>(), nameof(UserRole.Doctor)))
+            .ReturnsAsync(IdentityResult.Success);
+
+        clinicService
+            .Setup(service => service.LookupByPhonesAsync(
+                It.IsAny<ClinicAccessContext>(),
+                It.IsAny<LookupClinicsByPhonesDto>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<ClinicPhoneLookupResultDto>.Success(
+                new ClinicPhoneLookupResultDto(ClinicPhoneLookupStatus.Found, existingClinic, [])));
+
+        var sut = AdminDoctorServiceTestHelper.Create(
+            dbContext,
+            userManager.Object,
+            roleManager.Object,
+            clinicService);
+
+        // Act
+        var result = await sut.CreateAsync(request);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        clinicService.Verify(
+            service => service.AssignDoctorAsync(
+                It.IsAny<ClinicAccessContext>(),
+                It.Is<AssignDoctorToClinicDto>(dto =>
+                    dto.PhoneNumbers.SequenceEqual(request.ClinicPhoneNumbers)
+                    && dto.Name == null
+                    && dto.Address == null),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }
 
@@ -251,7 +405,7 @@ public class AdminDoctorServiceUpdateTests
             .ReturnsAsync(doctor);
         userManager.SetupSuccessfulUserUpdate();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.UpdateAsync(doctor.Id, request);
@@ -278,7 +432,7 @@ public class AdminDoctorServiceUpdateTests
         userManager.Setup(manager => manager.FindByIdAsync(It.IsAny<string>()))
             .ReturnsAsync((ApplicationUser?)null);
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.UpdateAsync(Guid.NewGuid(), request);
@@ -308,7 +462,7 @@ public class AdminDoctorServiceDeleteTests
 
         userManager.SetupSuccessfulUserUpdate();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.DeleteAsync(doctor.Id);
@@ -340,7 +494,7 @@ public class AdminDoctorServiceActivateTests
 
         userManager.SetupSuccessfulUserUpdate();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.ActivateAsync(doctor.Id);
@@ -369,7 +523,7 @@ public class AdminDoctorServiceDeactivateTests
 
         userManager.SetupSuccessfulUserUpdate();
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.DeactivateAsync(doctor.Id);
@@ -391,7 +545,7 @@ public class AdminDoctorServiceDeactivateTests
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor]).Object;
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.DeactivateAsync(doctor.Id);
@@ -410,7 +564,7 @@ public class AdminDoctorServiceDeactivateTests
         var roleManager = IdentityMockFactory.CreateRoleManager();
         var dbContext = AppDbContextMockFactory.CreateMock().Object;
 
-        var sut = new AdminDoctorService(dbContext, userManager.Object, roleManager.Object);
+        var sut = AdminDoctorServiceTestHelper.Create(dbContext, userManager.Object, roleManager.Object);
 
         // Act
         var result = await sut.DeactivateAsync(Guid.NewGuid());

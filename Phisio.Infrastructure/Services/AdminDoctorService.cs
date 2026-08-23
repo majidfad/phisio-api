@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Admin;
 using Phisio.Application.Admin.Doctors;
+using Phisio.Application.Clinics;
 using Phisio.Application.Common;
 using Phisio.Application.Doctors;
 using Phisio.Application.Notifications;
@@ -19,17 +20,20 @@ public class AdminDoctorService : IAdminDoctorService
     private readonly AppDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
+    private readonly IClinicService _clinicService;
     private readonly INotificationService _notifications;
 
     public AdminDoctorService(
         AppDbContext dbContext,
         UserManager<ApplicationUser> userManager,
         RoleManager<ApplicationRole> roleManager,
+        IClinicService clinicService,
         INotificationService? notifications = null)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _roleManager = roleManager;
+        _clinicService = clinicService;
         _notifications = notifications ?? NoOpNotificationService.Instance;
     }
 
@@ -102,6 +106,48 @@ public class AdminDoctorService : IAdminDoctorService
             return AuthResult<CreateAdminDoctorResponse>.Failure([validationError]);
         }
 
+        var adminAccess = new ClinicAccessContext(Guid.Empty, IsAdmin: true);
+        var clinicLookup = await _clinicService.LookupByPhonesAsync(
+            adminAccess,
+            new LookupClinicsByPhonesDto { PhoneNumbers = request.ClinicPhoneNumbers },
+            cancellationToken);
+
+        if (!clinicLookup.Succeeded)
+        {
+            return AuthResult<CreateAdminDoctorResponse>.Failure(clinicLookup.Errors);
+        }
+
+        if (clinicLookup.Value!.Status == ClinicPhoneLookupStatus.Conflict)
+        {
+            return AuthResult<CreateAdminDoctorResponse>.Failure(
+                [ClinicErrors.ConflictingClinicPhones]);
+        }
+
+        var creatingNewClinic = clinicLookup.Value.Status == ClinicPhoneLookupStatus.None;
+        if (creatingNewClinic)
+        {
+            if (string.IsNullOrWhiteSpace(request.NewClinicName)
+                || string.IsNullOrWhiteSpace(request.NewClinicAddress))
+            {
+                return AuthResult<CreateAdminDoctorResponse>.Failure(
+                    [ClinicErrors.ClinicCreateDetailsRequired]);
+            }
+
+            if (!request.ManagerIsThisDoctor
+                && (request.ClinicManagerId is null || request.ClinicManagerId == Guid.Empty))
+            {
+                return AuthResult<CreateAdminDoctorResponse>.Failure(
+                    [ClinicErrors.ManagerIdRequired]);
+            }
+        }
+
+        var profileAddress = ResolveClinicAddressForProfile(request, clinicLookup.Value);
+        if (string.IsNullOrWhiteSpace(profileAddress))
+        {
+            return AuthResult<CreateAdminDoctorResponse>.Failure(
+                [ClinicErrors.ClinicCreateDetailsRequired]);
+        }
+
         var (password, wasGenerated) = AdminPasswordResolver.Resolve(
             request.Password,
             request.GeneratePassword);
@@ -133,13 +179,47 @@ public class AdminDoctorService : IAdminDoctorService
                 addRoleResult.Errors.Select(error => error.Description));
         }
 
-        var profile = CreateProfile(doctor.Id, request);
+        var profile = CreateProfile(
+            doctor.Id,
+            request.Specialty,
+            request.MedicalLicenseNumber,
+            profileAddress);
         _dbContext.DoctorProfiles.Add(profile);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var assignResult = await _clinicService.AssignDoctorAsync(
+                adminAccess,
+                new AssignDoctorToClinicDto
+                {
+                    DoctorId = doctor.Id,
+                    PhoneNumbers = request.ClinicPhoneNumbers,
+                    Name = request.NewClinicName,
+                    Address = request.NewClinicAddress,
+                    ManagerIsThisDoctor = request.ManagerIsThisDoctor,
+                    ClinicManagerId = request.ClinicManagerId,
+                },
+                cancellationToken);
+
+            if (!assignResult.Succeeded)
+            {
+                await _userManager.DeleteAsync(doctor);
+                return AuthResult<CreateAdminDoctorResponse>.Failure(assignResult.Errors);
+            }
+        }
+        catch
+        {
+            await _userManager.DeleteAsync(doctor);
+            throw;
+        }
+
+        var managedClinics = await GetManagedClinicNamesByUserIdsAsync([doctor.Id], cancellationToken);
 
         return AuthResult<CreateAdminDoctorResponse>.Success(
             new CreateAdminDoctorResponse(
-                MapToDto(doctor, profile),
+                MapToDto(doctor, profile, managedClinics.GetValueOrDefault(doctor.Id)),
                 wasGenerated ? password : null));
     }
 
@@ -432,6 +512,24 @@ public class AdminDoctorService : IAdminDoctorService
                     .Select(clinic => clinic.Name)
                     .OrderBy(name => name)
                     .ToList());
+    }
+
+    private static string ResolveClinicAddressForProfile(
+        CreateAdminDoctorDto request,
+        ClinicPhoneLookupResultDto clinicLookup)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ClinicAddress))
+        {
+            return request.ClinicAddress.Trim();
+        }
+
+        if (clinicLookup.Status == ClinicPhoneLookupStatus.Found
+            && clinicLookup.Clinic is not null)
+        {
+            return clinicLookup.Clinic.Address;
+        }
+
+        return request.NewClinicAddress?.Trim() ?? string.Empty;
     }
 
     private static DoctorProfile CreateProfile(Guid doctorId, CreateAdminDoctorDto request) =>

@@ -222,6 +222,31 @@ public class ClinicsController : ControllerBase
             result.Value);
     }
 
+    [HttpPost("lookup-by-phones")]
+    [ProducesResponseType(typeof(ClinicPhoneLookupResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> LookupClinicsByPhones(
+        [FromBody] LookupClinicsByPhonesDto request,
+        CancellationToken cancellationToken)
+    {
+        var access = GetAccessContext();
+        if (access is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _clinicService.LookupByPhonesAsync(access, request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
     [HttpDelete("{clinicId:guid}/doctors/{doctorId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

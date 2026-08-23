@@ -19,4 +19,18 @@ public sealed class RegisterRequest
 
     /// <summary>Required when registering as a doctor.</summary>
     public string? Specialty { get; set; }
+
+    /// <summary>Required when registering as a doctor. Used to find or create a clinic.</summary>
+    public IList<string> ClinicPhoneNumbers { get; set; } = [];
+
+    /// <summary>Required when no clinic matches <see cref="ClinicPhoneNumbers"/>.</summary>
+    public string? NewClinicName { get; set; }
+
+    /// <summary>Required when no clinic matches <see cref="ClinicPhoneNumbers"/>.</summary>
+    public string? NewClinicAddress { get; set; }
+
+    /// <summary>
+    /// When creating a clinic during registration, sets the new doctor as <c>ClinicManagerId</c>.
+    /// </summary>
+    public bool ManagerIsThisDoctor { get; set; }
 }

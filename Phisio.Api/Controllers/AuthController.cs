@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Phisio.Api.Swagger;
 using Phisio.Application.Auth;
+using Phisio.Application.Clinics;
+using Phisio.Application.Common;
 using Swashbuckle.AspNetCore.Filters;
 
 namespace Phisio.Api.Controllers;
@@ -13,10 +15,12 @@ namespace Phisio.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IClinicService _clinicService;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IClinicService clinicService)
     {
         _authService = authService;
+        _clinicService = clinicService;
     }
 
     [AllowAnonymous]
@@ -37,6 +41,25 @@ public class AuthController : ControllerBase
         }
 
         return CreatedAtAction(nameof(Register), result.Value);
+    }
+
+    [AllowAnonymous]
+    [HttpPost("clinics/lookup-by-phones")]
+    [ProducesResponseType(typeof(ClinicPhoneLookupResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> LookupClinicsByPhones(
+        [FromBody] LookupClinicsByPhonesDto request,
+        CancellationToken cancellationToken)
+    {
+        var access = new ClinicAccessContext(Guid.Empty, IsAdmin: true);
+        var result = await _clinicService.LookupByPhonesAsync(access, request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
     }
 
     [AllowAnonymous]

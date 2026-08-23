@@ -30,7 +30,7 @@ internal static class DoctorTestDataBuilder
         string? email = "jane.smith@example.com",
         string specialty = "Orthopedics",
         string medicalLicenseNumber = "MD-12345",
-        string clinicAddress = "123 Clinic St") =>
+        string clinicAddress = "") =>
         new()
         {
             Name = name,
@@ -40,6 +40,10 @@ internal static class DoctorTestDataBuilder
             MedicalLicenseNumber = medicalLicenseNumber,
             ClinicAddress = clinicAddress,
             GeneratePassword = true,
+            ClinicPhoneNumbers = ["02199999999"],
+            NewClinicName = "New Clinic",
+            NewClinicAddress = "New Clinic Address",
+            ManagerIsThisDoctor = true,
         };
 
     public static Phisio.Application.Admin.Doctors.UpdateAdminDoctorDto UpdateDto(
