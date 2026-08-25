@@ -35,6 +35,11 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
             return AuthResult<SubmitDailyFeedbackResponse>.Failure([PatientDailyFeedbackErrors.DoctorNotFound]);
         }
 
+        if (!await HasActiveRelationshipAsync(patientId, doctorId.Value, cancellationToken))
+        {
+            return AuthResult<SubmitDailyFeedbackResponse>.Failure([PatientDailyFeedbackErrors.DoctorNotFound]);
+        }
+
         var normalizedComment = string.IsNullOrWhiteSpace(request.Comment)
             ? null
             : request.Comment.Trim();
@@ -162,4 +167,15 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
 
         return doctorIdFromRelationship == Guid.Empty ? null : doctorIdFromRelationship;
     }
+
+    private Task<bool> HasActiveRelationshipAsync(
+        Guid patientId,
+        Guid doctorId,
+        CancellationToken cancellationToken) =>
+        _dbContext.DoctorPatients
+            .AsNoTracking()
+            .WhereActive()
+            .AnyAsync(
+                relationship => relationship.PatientId == patientId && relationship.DoctorId == doctorId,
+                cancellationToken);
 }

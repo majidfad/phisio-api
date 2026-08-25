@@ -1,6 +1,9 @@
 using FluentAssertions;
+using Moq;
+using Phisio.Application.Notifications;
 using Phisio.Application.PatientDailyFeedback;
 using Phisio.Application.PatientExercises;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Services;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
@@ -10,6 +13,195 @@ namespace Phisio.Tests.Infrastructure.Services;
 public class PatientDailyFeedbackServiceSubmitTests
 {
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+    [Fact]
+    public async Task SubmitAsync_WhenExplicitConnectedDoctorId_Succeeds()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient();
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            doctorPatients: [relationship]);
+
+        var sut = new PatientDailyFeedbackService(dbContext.Object);
+        var request = new SubmitDailyFeedbackRequest
+        {
+            DoctorId = doctor.Id,
+            ImprovementScore = 4,
+            HardnessScore = 3,
+        };
+
+        // Act
+        var result = await sut.SubmitAsync(patient.Id, request);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Value!.DoctorId.Should().Be(doctor.Id);
+        dbContext.Object.DailyPatientFeedbacks.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task SubmitAsync_WhenExplicitUnconnectedDoctorId_ReturnsNotFound()
+    {
+        // Arrange
+        var connectedDoctor = ApplicationUserBuilder.Doctor(phoneNumber: "+15551110001");
+        var otherDoctor = ApplicationUserBuilder.Doctor(phoneNumber: "+15551110002");
+        var patient = ApplicationUserBuilder.Patient();
+        var relationship = DoctorPatientBuilder.Create(connectedDoctor.Id, patient.Id);
+        var notifications = new Mock<INotificationService>();
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [connectedDoctor, otherDoctor, patient],
+            doctorPatients: [relationship]);
+
+        var sut = new PatientDailyFeedbackService(dbContext.Object, notifications.Object);
+        var request = new SubmitDailyFeedbackRequest
+        {
+            DoctorId = otherDoctor.Id,
+            ImprovementScore = 4,
+            HardnessScore = 3,
+        };
+
+        // Act
+        var result = await sut.SubmitAsync(patient.Id, request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(PatientDailyFeedbackErrors.DoctorNotFound);
+        dbContext.Object.DailyPatientFeedbacks.Should().BeEmpty();
+        notifications.Verify(
+            service => service.NotifyAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<NotificationType>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_WhenExplicitRandomExistingUserId_ReturnsNotFound()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient();
+        var admin = ApplicationUserBuilder.Admin();
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
+        var notifications = new Mock<INotificationService>();
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient, admin],
+            doctorPatients: [relationship]);
+
+        var sut = new PatientDailyFeedbackService(dbContext.Object, notifications.Object);
+        var request = new SubmitDailyFeedbackRequest
+        {
+            DoctorId = admin.Id,
+            ImprovementScore = 4,
+            HardnessScore = 3,
+        };
+
+        // Act
+        var result = await sut.SubmitAsync(patient.Id, request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(PatientDailyFeedbackErrors.DoctorNotFound);
+        dbContext.Object.DailyPatientFeedbacks.Should().BeEmpty();
+        notifications.Verify(
+            service => service.NotifyAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<NotificationType>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_WhenCompletionExistsButRelationshipInactive_ReturnsNotFound()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient();
+        var exercise = ExerciseBuilder.Create();
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id, isEnabled: false);
+        var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId, scheduledDate: Today);
+        var completion = ExerciseCompletionBuilder.Create(
+            assignment.UserExerciseId,
+            patient.Id,
+            doctor.Id,
+            exercise.ExerciseId,
+            Today);
+        var notifications = new Mock<INotificationService>();
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            exercises: [exercise],
+            userExercises: [assignment],
+            doctorPatients: [relationship],
+            exerciseCompletions: [completion]);
+
+        var sut = new PatientDailyFeedbackService(dbContext.Object, notifications.Object);
+        var request = new SubmitDailyFeedbackRequest
+        {
+            ImprovementScore = 4,
+            HardnessScore = 3,
+        };
+
+        // Act
+        var result = await sut.SubmitAsync(patient.Id, request);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be(PatientDailyFeedbackErrors.DoctorNotFound);
+        dbContext.Object.DailyPatientFeedbacks.Should().BeEmpty();
+        notifications.Verify(
+            service => service.NotifyAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<NotificationType>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_WhenDoctorIdOmittedAndActiveRelationshipExists_Succeeds()
+    {
+        // Arrange
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient();
+        var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            doctorPatients: [relationship]);
+
+        var sut = new PatientDailyFeedbackService(dbContext.Object);
+        var request = new SubmitDailyFeedbackRequest
+        {
+            ImprovementScore = 4,
+            HardnessScore = 3,
+        };
+
+        // Act
+        var result = await sut.SubmitAsync(patient.Id, request);
+
+        // Assert
+        result.Succeeded.Should().BeTrue();
+        result.Value!.DoctorId.Should().Be(doctor.Id);
+        dbContext.Object.DailyPatientFeedbacks.Should().ContainSingle();
+    }
 
     [Fact]
     public async Task SubmitAsync_WhenFirstFeedbackForToday_CreatesRecord()
