@@ -2,9 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -14,6 +12,9 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    # Postgres is used by EF migration checks below.
+    # Automated tests (unit + integration in Phisio.Tests) use EF InMemory
+    # and do not require this service.
     services:
       postgres:
         image: postgres:16-alpine
@@ -46,8 +47,14 @@ jobs:
       - name: Build
         run: dotnet build Phisio.sln --configuration Release --no-restore
 
-      - name: Test
-        run: dotnet test Phisio.sln --configuration Release --no-build --verbosity normal
+      # Runs the complete backend suite in Phisio.Tests (unit + integration).
+      # Job fails if any test fails or if the test project fails to build/discover.
+      - name: Run all unit and integration tests
+        run: >
+          dotnet test Phisio.sln
+          --configuration Release
+          --no-build
+          --verbosity normal
 
       - name: Install EF tools
         run: dotnet tool restore
