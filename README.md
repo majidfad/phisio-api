@@ -28,6 +28,6 @@ Unified stack at `/opt/phisio`. Images are built in CI and pulled from **GHCR** 
 
 Push `main` → Deploy bootstraps the server, migrates data if needed, pulls `ghcr.io/.../phisio-api:<sha>`, starts `postgres` + `api`. Web CI updates the `web` profile only.
 
-See [deploy/GITHUB_SECRETS.md](deploy/GITHUB_SECRETS.md).
+See [deploy/GITHUB_SECRETS.md](deploy/GITHUB_SECRETS.md). VPS migration: [deploy/SERVER_MIGRATION.md](deploy/SERVER_MIGRATION.md).
 
 
