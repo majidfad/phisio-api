@@ -48,3 +48,12 @@ public class UpdateClinicDtoValidator : AbstractValidator<UpdateClinicDto>
             .WithMessage("فرمت شماره تلفن نامعتبر است.");
     }
 }
+
+public class ChangeClinicManagerDtoValidator : AbstractValidator<ChangeClinicManagerDto>
+{
+    public ChangeClinicManagerDtoValidator()
+    {
+        RuleFor(x => x.ClinicManagerId)
+            .NotEmpty().WithMessage("ClinicManagerId is required.");
+    }
+}

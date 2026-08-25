@@ -21,6 +21,7 @@ public class CreateAdminDoctorDtoValidatorTests
             MedicalLicenseNumber = "MD-11111",
             ClinicAddress = "123 Clinic St",
             GeneratePassword = true,
+            ClinicPhoneNumbers = ["02188881111"],
         };
 
         // Act
@@ -53,7 +54,7 @@ public class CreateAdminDoctorDtoValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.Email);
         result.ShouldHaveValidationErrorFor(x => x.Specialty);
         result.ShouldHaveValidationErrorFor(x => x.MedicalLicenseNumber);
-        result.ShouldHaveValidationErrorFor(x => x.ClinicAddress);
+        result.ShouldHaveValidationErrorFor(x => x.ClinicPhoneNumbers);
     }
 }
 

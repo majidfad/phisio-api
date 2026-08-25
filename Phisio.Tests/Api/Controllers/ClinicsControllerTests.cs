@@ -268,3 +268,55 @@ public class ClinicsControllerDoctorManagementTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 }
+
+public class ClinicsControllerChangeManagerTests
+{
+    [Fact]
+    public async Task ChangeClinicManager_WhenSucceeded_ReturnsOk()
+    {
+        var adminId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        var clinicId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var newManagerId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var clinic = new ClinicDto(
+            clinicId,
+            "Central Clinic",
+            "123 Main St",
+            newManagerId,
+            ["+15551111111"],
+            DateTime.UtcNow);
+
+        var clinicService = new Mock<IClinicService>();
+        clinicService.Setup(service => service.ChangeManagerAsync(
+                It.Is<ClinicAccessContext>(access => access.UserId == adminId && access.IsAdmin),
+                clinicId,
+                It.Is<ChangeClinicManagerDto>(request => request.ClinicManagerId == newManagerId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<ClinicDto>.Success(clinic));
+
+        var controller = ClinicsControllerTestHelper.CreateController(
+            clinicService,
+            ClinicsControllerTestHelper.CreateAdmin(adminId));
+
+        var result = await controller.ChangeClinicManager(
+            clinicId,
+            new ChangeClinicManagerDto { ClinicManagerId = newManagerId },
+            CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeEquivalentTo(clinic);
+    }
+
+    [Fact]
+    public async Task ChangeClinicManager_WhenUserIdClaimIsMissing_ReturnsUnauthorized()
+    {
+        var clinicService = new Mock<IClinicService>();
+        var controller = ClinicsControllerTestHelper.CreateController(clinicService);
+
+        var result = await controller.ChangeClinicManager(
+            Guid.NewGuid(),
+            new ChangeClinicManagerDto { ClinicManagerId = Guid.NewGuid() },
+            CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+}

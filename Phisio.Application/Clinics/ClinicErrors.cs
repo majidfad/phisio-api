@@ -30,4 +30,6 @@ public static class ClinicErrors
 
     public const string ClinicCreateDetailsRequired =
         "Clinic name and address are required when no existing clinic matches the phone numbers.";
+
+    public const string AdminRequired = "Only administrators can change the clinic manager.";
 }

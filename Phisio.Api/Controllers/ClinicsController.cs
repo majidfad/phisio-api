@@ -118,6 +118,36 @@ public class ClinicsController : ControllerBase
         return Ok(result.Value);
     }
 
+    [HttpPut("{id:guid}/manager")]
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [ProducesResponseType(typeof(ClinicDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ChangeClinicManager(
+        Guid id,
+        [FromBody] ChangeClinicManagerDto request,
+        CancellationToken cancellationToken)
+    {
+        var access = GetAccessContext();
+        if (access is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _clinicService.ChangeManagerAsync(access, id, request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return result.Errors.Contains(ClinicErrors.NotFound)
+                ? NotFound(new { errors = result.Errors })
+                : BadRequest(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

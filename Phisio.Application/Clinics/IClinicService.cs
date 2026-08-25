@@ -25,6 +25,12 @@ public interface IClinicService
         UpdateClinicDto request,
         CancellationToken cancellationToken = default);
 
+    Task<AuthResult<ClinicDto>> ChangeManagerAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        ChangeClinicManagerDto request,
+        CancellationToken cancellationToken = default);
+
     Task<AuthResult<bool>> DeleteAsync(
         ClinicAccessContext access,
         Guid clinicId,

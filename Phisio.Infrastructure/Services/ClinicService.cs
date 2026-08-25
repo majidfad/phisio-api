@@ -137,6 +137,88 @@ public class ClinicService : IClinicService
         return AuthResult<ClinicDto>.Success(MapToDto(clinic));
     }
 
+    public async Task<AuthResult<ClinicDto>> ChangeManagerAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        ChangeClinicManagerDto request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!access.IsAdmin)
+        {
+            return AuthResult<ClinicDto>.Failure([ClinicErrors.AdminRequired]);
+        }
+
+        if (request.ClinicManagerId == Guid.Empty)
+        {
+            return AuthResult<ClinicDto>.Failure([ClinicErrors.ManagerIdRequired]);
+        }
+
+        var clinic = await _dbContext.Clinics
+            .Include(item => item.PhoneNumbers)
+            .Include(item => item.ClinicDoctors)
+            .FirstOrDefaultAsync(item => item.ClinicId == clinicId, cancellationToken);
+
+        if (clinic is null)
+        {
+            return AuthResult<ClinicDto>.Failure([ClinicErrors.NotFound]);
+        }
+
+        if (clinic.ClinicManagerId == request.ClinicManagerId)
+        {
+            return AuthResult<ClinicDto>.Success(MapToDto(clinic));
+        }
+
+        var previousManagerId = clinic.ClinicManagerId;
+
+        var newManager = await _dbContext.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(user => user.Id == request.ClinicManagerId, cancellationToken);
+
+        if (newManager is null || !newManager.IsEnabled)
+        {
+            return AuthResult<ClinicDto>.Failure([ClinicErrors.ManagerNotFound]);
+        }
+
+        var grantResult = await EnsureClinicManagerRoleAsync(
+            request.ClinicManagerId,
+            allowExistingClinicManager: true,
+            cancellationToken);
+        if (!grantResult.Succeeded)
+        {
+            return AuthResult<ClinicDto>.Failure(grantResult.Errors);
+        }
+
+        clinic.ClinicManagerId = request.ClinicManagerId;
+        clinic.EnsureManagerDoctorMembership();
+
+        await RevokeClinicManagerRoleIfNoLongerManagingAsync(
+            previousManagerId,
+            clinic.ClinicId,
+            cancellationToken);
+
+        if (_dbContext.Database.IsRelational())
+        {
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+        else
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return AuthResult<ClinicDto>.Success(MapToDto(clinic));
+    }
+
     public async Task<AuthResult<bool>> DeleteAsync(
         ClinicAccessContext access,
         Guid clinicId,
@@ -560,6 +642,7 @@ public class ClinicService : IClinicService
         var manager = _dbContext.Users.Local
             .FirstOrDefault(user => user.Id == managerId)
             ?? await _dbContext.Users
+                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(user => user.Id == managerId, cancellationToken);
 
         if (manager is null)
@@ -603,6 +686,44 @@ public class ClinicService : IClinicService
         }
 
         return AuthResult<bool>.Success(true);
+    }
+
+    private async Task RevokeClinicManagerRoleIfNoLongerManagingAsync(
+        Guid previousManagerId,
+        Guid reassignedClinicId,
+        CancellationToken cancellationToken)
+    {
+        // Exclude the clinic being reassigned so we don't rely on a pre-SaveChanges store read.
+        var stillManagesClinic = await _dbContext.Clinics
+            .AnyAsync(
+                clinic => clinic.ClinicManagerId == previousManagerId
+                    && clinic.ClinicId != reassignedClinicId,
+                cancellationToken);
+
+        if (stillManagesClinic)
+        {
+            return;
+        }
+
+        var clinicManagerRoleId = await _dbContext.Roles
+            .Where(role => role.Name == RoleNames.ClinicManager)
+            .Select(role => (Guid?)role.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (clinicManagerRoleId is null)
+        {
+            return;
+        }
+
+        var userRole = await _dbContext.UserRoles
+            .FirstOrDefaultAsync(
+                item => item.UserId == previousManagerId && item.RoleId == clinicManagerRoleId.Value,
+                cancellationToken);
+
+        if (userRole is not null)
+        {
+            _dbContext.UserRoles.Remove(userRole);
+        }
     }
 
     private async Task<AuthResult<IReadOnlyList<NormalizedClinicPhone>>> ValidatePhoneNumbersAsync(
