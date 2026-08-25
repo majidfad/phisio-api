@@ -38,7 +38,7 @@ is_placeholder_image() {
     || "${value}" == "phisio-web:pending" \
     || "${value}" == *:local \
     || "${value}" == *:pending \
-    || "${value}" != ghcr.io/* ]]
+    || ( "${value}" != ghcr.io/* && "${value}" != focker.ir/ghcr.io/* ) ]]
 }
 
 merge_env_key() {

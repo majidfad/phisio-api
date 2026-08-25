@@ -62,7 +62,7 @@ services:
       start_period: 15s
 
   api:
-    image: ${PHISIO_API_IMAGE:?PHISIO_API_IMAGE must be set to a ghcr.io/... image}
+    image: ${PHISIO_API_IMAGE:?PHISIO_API_IMAGE must be set to a focker.ir/ghcr.io/... image}
     pull_policy: missing
     container_name: phisio-api
     restart: unless-stopped
@@ -108,7 +108,7 @@ services:
 
   web:
     profiles: [web]
-    image: ${PHISIO_WEB_IMAGE:?PHISIO_WEB_IMAGE must be set to a ghcr.io/... image}
+    image: ${PHISIO_WEB_IMAGE:?PHISIO_WEB_IMAGE must be set to a focker.ir/ghcr.io/... image}
     pull_policy: missing
     container_name: phisio-web
     restart: unless-stopped

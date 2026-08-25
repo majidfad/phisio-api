@@ -15,7 +15,9 @@ permissions:
   packages: write
 
 env:
+  # Push to real GHCR from GitHub Actions; VPS pulls via focker.ir mirror.
   REGISTRY: ghcr.io
+  PULL_REGISTRY: focker.ir/ghcr.io
   APP_DIR: /opt/phisio
 
 jobs:
@@ -86,7 +88,7 @@ jobs:
       - name: Bootstrap, migrate, and deploy on server
         uses: appleboy/ssh-action@v1.2.0
         env:
-          REGISTRY: ${{ env.REGISTRY }}
+          PULL_REGISTRY: ${{ env.PULL_REGISTRY }}
           IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
           APP_DIR: ${{ env.APP_DIR }}
@@ -100,7 +102,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: REGISTRY,IMAGE_OWNER,IMAGE_TAG,APP_DIR,POSTGRES_PASSWORD,JWT_SECRET_KEY,JWT_ISSUER,JWT_AUDIENCE,GHCR_PULL_TOKEN,GITHUB_ACTOR
+          envs: PULL_REGISTRY,IMAGE_OWNER,IMAGE_TAG,APP_DIR,POSTGRES_PASSWORD,JWT_SECRET_KEY,JWT_ISSUER,JWT_AUDIENCE,GHCR_PULL_TOKEN,GITHUB_ACTOR
           script: |
             set -euo pipefail
             cd "${APP_DIR}"
@@ -127,17 +129,17 @@ jobs:
             fi
 
             if [ -n "${GHCR_PULL_TOKEN:-}" ]; then
-              echo "${GHCR_PULL_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+              echo "${GHCR_PULL_TOKEN}" | docker login focker.ir -u "${GITHUB_ACTOR}" --password-stdin
             else
               echo "GHCR_PULL_TOKEN is empty — pull may fail for private packages"
             fi
 
-            export PHISIO_API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/phisio-api:${IMAGE_TAG}"
+            export PHISIO_API_IMAGE="${PULL_REGISTRY}/${IMAGE_OWNER}/phisio-api:${IMAGE_TAG}"
 
             case "${PHISIO_API_IMAGE}" in
-              ghcr.io/*) ;;
+              focker.ir/ghcr.io/*) ;;
               *)
-                echo "Refusing non-GHCR API image: ${PHISIO_API_IMAGE}"
+                echo "Refusing non-mirrored GHCR API image: ${PHISIO_API_IMAGE}"
                 exit 1
                 ;;
             esac
@@ -151,9 +153,9 @@ jobs:
             # Compose always interpolates profiled services; keep a valid GHCR stub until web deploys.
             CURRENT_WEB="$(grep -E '^PHISIO_WEB_IMAGE=' .env 2>/dev/null | cut -d= -f2- || true)"
             case "${CURRENT_WEB}" in
-              ghcr.io/*) ;;
+              focker.ir/ghcr.io/*|ghcr.io/*) ;;
               *)
-                STUB_WEB="${REGISTRY}/${IMAGE_OWNER}/phisio-web:latest"
+                STUB_WEB="${PULL_REGISTRY}/${IMAGE_OWNER}/phisio-web:latest"
                 if grep -q '^PHISIO_WEB_IMAGE=' .env; then
                   sed -i "s|^PHISIO_WEB_IMAGE=.*|PHISIO_WEB_IMAGE=${STUB_WEB}|" .env
                 else
@@ -223,7 +225,8 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env stop api || true
             docker compose -f docker-compose.prod.yml --env-file .env rm -f api || true
             # Drop old tags for this repo (keep disk small); SHA tag is pulled fresh below.
-            docker images "${REGISTRY}/${IMAGE_OWNER}/phisio-api" -q | sort -u | xargs -r docker rmi -f || true
+            docker images "${PULL_REGISTRY}/${IMAGE_OWNER}/phisio-api" -q | sort -u | xargs -r docker rmi -f || true
+            docker images "ghcr.io/${IMAGE_OWNER}/phisio-api" -q | sort -u | xargs -r docker rmi -f || true
 
             docker compose -f docker-compose.prod.yml --env-file .env pull api postgres
             # Do not start web here (profile "web").

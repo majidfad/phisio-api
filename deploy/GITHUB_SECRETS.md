@@ -7,7 +7,7 @@
 | `DEPLOY_SSH_KEY` | Private SSH key |
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 | `JWT_SECRET_KEY` | JWT signing key (min 32 chars) |
-| `GHCR_PULL_TOKEN` | PAT with `read:packages` so the VPS can pull from GHCR |
+| `GHCR_PULL_TOKEN` | PAT with `read:packages` so the VPS can pull via `focker.ir` |
 
 Optional: `JWT_ISSUER`, `JWT_AUDIENCE`
 
@@ -18,8 +18,9 @@ Deploy path: `/opt/phisio`
 ## Image strategy (best practice)
 
 - CI builds and pushes to **GHCR**: `ghcr.io/<owner>/phisio-api:<git-sha>` (+ `:latest`)
+- Server pulls via **focker.ir** mirror: `focker.ir/ghcr.io/<owner>/phisio-api:<git-sha>`
 - Server **never builds** app images and never uses `*:local`
-- Deploy writes the SHA image into `/opt/phisio/.env` as `PHISIO_API_IMAGE` / `PHISIO_WEB_IMAGE`
+- Deploy writes the mirrored SHA image into `/opt/phisio/.env` as `PHISIO_API_IMAGE` / `PHISIO_WEB_IMAGE`
 - Compose uses `pull_policy: missing` (CI still runs an explicit `pull`)
 - `web` is behind Compose profile `web` (API deploy starts only `postgres` + `api`)
 
@@ -27,12 +28,12 @@ Deploy path: `/opt/phisio`
 
 1. Create `/opt/phisio` if missing  
 2. Bootstrap (migrate legacy volumes, sanitize bad image refs)  
-3. Login to GHCR on the server  
-4. Set `PHISIO_API_IMAGE=ghcr.io/.../phisio-api:<sha>`  
+3. Login to `focker.ir` on the server  
+4. Set `PHISIO_API_IMAGE=focker.ir/ghcr.io/.../phisio-api:<sha>`  
 5. Pull + start `postgres` + `api`  
 6. Prune unused images  
 
-Web CI sets `PHISIO_WEB_IMAGE=ghcr.io/.../phisio-web:<sha>` and runs `compose --profile web up`.
+Web CI sets `PHISIO_WEB_IMAGE=focker.ir/ghcr.io/.../phisio-web:<sha>` and runs `compose --profile web up`.
 
 ## Manual commands on the server
 
