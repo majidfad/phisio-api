@@ -47,7 +47,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-await app.MigrateDatabaseAsync();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    await app.MigrateDatabaseAsync();
+}
+
 await app.SeedIdentityDataAsync();
 
 if (app.Environment.IsDevelopment())
@@ -69,3 +73,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program;
