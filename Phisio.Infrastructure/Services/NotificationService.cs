@@ -206,9 +206,10 @@ public class NotificationService : INotificationService
                 },
                 cancellationToken);
         }
-        catch
+        catch (Exception)
         {
             // Push failures must never break in-app notification creation.
+            // Details are logged inside WebPushSender; this catch is a last-resort guard.
         }
     }
 
