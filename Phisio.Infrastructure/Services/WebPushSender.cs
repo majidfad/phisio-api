@@ -42,6 +42,9 @@ public class WebPushSender : IWebPushSender
     {
         if (!_vapid.IsConfigured)
         {
+            _logger.LogWarning(
+                "Skipping web push for user {UserId}: VAPID keys are not configured.",
+                userId);
             return;
         }
 
@@ -51,6 +54,9 @@ public class WebPushSender : IWebPushSender
 
         if (subscriptions.Count == 0)
         {
+            _logger.LogInformation(
+                "Skipping web push for user {UserId}: no push_subscriptions rows.",
+                userId);
             return;
         }
 
@@ -79,10 +85,20 @@ public class WebPushSender : IWebPushSender
                     subscription.Auth);
 
                 await client.SendNotificationAsync(pushSubscription, payload, vapidDetails);
+                _logger.LogInformation(
+                    "Web push accepted by push service for user {UserId} endpoint {Endpoint}",
+                    userId,
+                    subscription.Endpoint);
             }
             catch (WebPushException ex) when (
                 ex.StatusCode is HttpStatusCode.Gone or HttpStatusCode.NotFound)
             {
+                _logger.LogInformation(
+                    ex,
+                    "Removing stale push subscription for user {UserId} endpoint {Endpoint} ({StatusCode})",
+                    userId,
+                    subscription.Endpoint,
+                    (int?)ex.StatusCode);
                 stale.Add(subscription);
             }
             catch (Exception ex)
