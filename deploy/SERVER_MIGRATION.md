@@ -84,11 +84,13 @@ If you generated a **new SSH key** for the new VPS, update `DEPLOY_SSH_KEY` in b
 
 ### 5. Update Cloudflare DNS
 
-For **zivan.me** and **www.zivan.me**:
+For **zivan.me**, **www.zivan.me**, and **app.zivan.me**:
 
 - Change the **A record** from `45.59.114.213` → `85.198.15.132`
 - Proxy status: **Proxied** (orange cloud), same as before
 - SSL/TLS mode: **Full** or **Full (strict)** (unchanged)
+
+Add an **A** (or CNAME) record for **app.zivan.me** pointing at the same origin IP if it is not already present.
 
 Wait for DNS propagation (usually minutes with Cloudflare).
 
@@ -108,9 +110,12 @@ docker compose -f docker-compose.prod.yml --env-file .env --profile web up -d --
 
 ```bash
 curl -fsS https://zivan.me/healthz
+curl -fsS https://app.zivan.me/healthz
 curl -fsS https://zivan.me/api/health
+curl -fsS https://app.zivan.me/api/health
 ```
 
+Confirm marketing pages on **https://zivan.me** and login on **https://app.zivan.me/login**.
 Log in to the app and confirm uploads / patient data.
 
 ### 8. Update local tools
@@ -138,4 +143,4 @@ These must be updated outside the repo:
 - Local SSH / tunnel configs
 - Server `/opt/phisio/.env` (copy from old server or let CI merge secrets)
 
-Domain **zivan.me** in `deploy/proxy.conf.template` stays the same; only the origin IP behind Cloudflare changes.
+Domain **zivan.me** / **app.zivan.me** in `deploy/proxy.conf.template` stays the same; only the origin IP behind Cloudflare changes.
