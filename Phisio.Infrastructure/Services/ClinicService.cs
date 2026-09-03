@@ -332,6 +332,120 @@ public class ClinicService : IClinicService
         return AuthResult<IReadOnlyList<ClinicPatientDto>>.Success(patients);
     }
 
+    public async Task<AuthResult<ClinicAdherenceResponse>> GetAdherenceAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        Guid? doctorId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var clinic = await FindAccessibleClinicAsync(access, clinicId, cancellationToken);
+        if (clinic is null)
+        {
+            return AuthResult<ClinicAdherenceResponse>.Failure([ClinicErrors.NotFound]);
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var last7From = today.AddDays(-6);
+        var last30From = today.AddDays(-29);
+
+        var assignmentQuery = _dbContext.UserExercises
+            .AsNoTracking()
+            .Where(assignment =>
+                assignment.ClinicId == clinicId
+                && assignment.IsActive
+                && assignment.IsEnabled
+                && assignment.ScheduledDate >= last30From
+                && assignment.ScheduledDate <= today);
+
+        if (doctorId is Guid filteredDoctorId)
+        {
+            assignmentQuery = assignmentQuery.Where(assignment => assignment.DoctorId == filteredDoctorId);
+        }
+
+        var assignments = await assignmentQuery
+            .Select(assignment => new
+            {
+                assignment.UserExerciseId,
+                assignment.DoctorId,
+                assignment.PatientId,
+                assignment.ScheduledDate,
+            })
+            .ToListAsync(cancellationToken);
+
+        var assignmentIds = assignments.Select(assignment => assignment.UserExerciseId).ToList();
+        var completedIds = assignmentIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _dbContext.ExerciseCompletions
+                .AsNoTracking()
+                .Where(completion =>
+                    completion.IsEnabled && assignmentIds.Contains(completion.UserExerciseId))
+                .Select(completion => completion.UserExerciseId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+        var daySlots = assignments
+            .GroupBy(assignment => (assignment.DoctorId, assignment.PatientId, assignment.ScheduledDate))
+            .Select(group => (
+                group.Key.DoctorId,
+                group.Key.PatientId,
+                group.Key.ScheduledDate,
+                Completed: group.Any(assignment => completedIds.Contains(assignment.UserExerciseId))))
+            .ToList();
+
+        var todayPeriod = BuildAdherencePeriod(daySlots, today, today);
+        var last7Period = BuildAdherencePeriod(daySlots, last7From, today);
+        var last30Period = BuildAdherencePeriod(daySlots, last30From, today);
+
+        var patientKeys = daySlots
+            .Where(slot => slot.ScheduledDate >= last7From && slot.ScheduledDate <= today)
+            .Select(slot => (slot.DoctorId, slot.PatientId))
+            .Distinct()
+            .ToList();
+
+        var userIds = patientKeys
+            .SelectMany(key => new[] { key.DoctorId, key.PatientId })
+            .Distinct()
+            .ToList();
+
+        var namesById = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _dbContext.Users
+                .AsNoTracking()
+                .Where(user => userIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, user => user.Name, cancellationToken);
+
+        var patients = patientKeys
+            .Select(key =>
+            {
+                var slots = daySlots
+                    .Where(slot =>
+                        slot.DoctorId == key.DoctorId
+                        && slot.PatientId == key.PatientId
+                        && slot.ScheduledDate >= last7From
+                        && slot.ScheduledDate <= today)
+                    .ToList();
+                var scheduledDays = slots.Count;
+                var completedDays = slots.Count(slot => slot.Completed);
+                return new ClinicPatientAdherenceDto(
+                    key.PatientId,
+                    namesById.GetValueOrDefault(key.PatientId, string.Empty),
+                    key.DoctorId,
+                    namesById.GetValueOrDefault(key.DoctorId, string.Empty),
+                    scheduledDays,
+                    completedDays,
+                    ToAdherencePercentage(scheduledDays, completedDays));
+            })
+            .OrderBy(patient => patient.PatientName)
+            .ThenBy(patient => patient.DoctorName)
+            .ToList();
+
+        return AuthResult<ClinicAdherenceResponse>.Success(new ClinicAdherenceResponse(
+            todayPeriod,
+            last7Period,
+            last30Period,
+            patients));
+    }
+
     public async Task<AuthResult<ClinicDoctorMemberDto>> AddDoctorAsync(
         ClinicAccessContext access,
         Guid clinicId,
@@ -648,6 +762,30 @@ public class ClinicService : IClinicService
             profile?.Specialty ?? string.Empty,
             profile?.MedicalLicenseNumber ?? string.Empty,
             doctor.Id == clinicManagerId);
+
+    private static ClinicAdherencePeriodDto BuildAdherencePeriod(
+        IReadOnlyList<(Guid DoctorId, Guid PatientId, DateOnly ScheduledDate, bool Completed)> daySlots,
+        DateOnly from,
+        DateOnly to)
+    {
+        var inRange = daySlots
+            .Where(slot => slot.ScheduledDate >= from && slot.ScheduledDate <= to)
+            .ToList();
+        var scheduledDays = inRange.Count;
+        var completedDays = inRange.Count(slot => slot.Completed);
+        return new ClinicAdherencePeriodDto(
+            from,
+            to,
+            scheduledDays,
+            completedDays,
+            Math.Max(scheduledDays - completedDays, 0),
+            ToAdherencePercentage(scheduledDays, completedDays));
+    }
+
+    private static int ToAdherencePercentage(int scheduledDays, int completedDays) =>
+        scheduledDays == 0
+            ? 0
+            : (int)Math.Round(completedDays * 100.0 / scheduledDays, MidpointRounding.AwayFromZero);
 
     private static IQueryable<Clinic> ApplyAccessFilter(IQueryable<Clinic> query, ClinicAccessContext access) =>
         access.IsAdmin

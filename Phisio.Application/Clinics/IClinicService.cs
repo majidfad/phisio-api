@@ -47,6 +47,12 @@ public interface IClinicService
         Guid? doctorId = null,
         CancellationToken cancellationToken = default);
 
+    Task<AuthResult<ClinicAdherenceResponse>> GetAdherenceAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        Guid? doctorId = null,
+        CancellationToken cancellationToken = default);
+
     Task<AuthResult<ClinicDoctorMemberDto>> AddDoctorAsync(
         ClinicAccessContext access,
         Guid clinicId,
