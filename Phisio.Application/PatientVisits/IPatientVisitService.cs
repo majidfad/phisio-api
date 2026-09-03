@@ -43,5 +43,11 @@ public interface IPatientVisitService
         int pageSize,
         string? search,
         CancellationToken cancellationToken = default);
+
+    Task<AuthResult<VisitFeedbackDto>> SubmitVisitFeedbackAsync(
+        PatientVisitAccessContext access,
+        Guid visitId,
+        SubmitVisitFeedbackRequest request,
+        CancellationToken cancellationToken = default);
 }
 

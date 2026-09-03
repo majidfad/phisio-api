@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.PatientVisits;
 using Phisio.Application.Relationships;
+using Phisio.Domain.Common;
 using Phisio.Domain.Enums;
 using Phisio.Domain.Entities;
 using Phisio.Infrastructure.Persistence;
@@ -119,7 +120,60 @@ public class PatientVisitService : IPatientVisitService
                 visit.VisitAt,
                 visit.VisitType,
                 visit.PatientCondition,
-                visit.DoctorNotes));
+                visit.DoctorNotes,
+                Feedback: null));
+    }
+
+    public async Task<AuthResult<VisitFeedbackDto>> SubmitVisitFeedbackAsync(
+        PatientVisitAccessContext access,
+        Guid visitId,
+        SubmitVisitFeedbackRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!access.IsPatient)
+        {
+            return AuthResult<VisitFeedbackDto>.Failure([PatientVisitErrors.VisitNotFound]);
+        }
+
+        var visit = await _dbContext.PatientVisits
+            .FirstOrDefaultAsync(
+                v => v.PatientVisitId == visitId && v.PatientId == access.UserId,
+                cancellationToken);
+
+        if (visit is null)
+        {
+            return AuthResult<VisitFeedbackDto>.Failure([PatientVisitErrors.VisitNotFound]);
+        }
+
+        var alreadyExists = await _dbContext.PatientVisitFeedbacks
+            .AnyAsync(f => f.PatientVisitId == visitId, cancellationToken);
+        if (alreadyExists)
+        {
+            return AuthResult<VisitFeedbackDto>.Failure([PatientVisitErrors.FeedbackAlreadySubmitted]);
+        }
+
+        try
+        {
+            var feedback = PatientVisitFeedback.Create(
+                visitId,
+                request.SatisfactionScore,
+                request.DoctorCommunicationScore,
+                request.Comment);
+
+            _dbContext.PatientVisitFeedbacks.Add(feedback);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return AuthResult<VisitFeedbackDto>.Success(
+                new VisitFeedbackDto(
+                    feedback.SatisfactionScore,
+                    feedback.DoctorCommunicationScore,
+                    feedback.Comment,
+                    feedback.CreatedAt));
+        }
+        catch (DomainException)
+        {
+            return AuthResult<VisitFeedbackDto>.Failure([PatientVisitErrors.FeedbackScoresRequired]);
+        }
     }
 
     public Task<AuthResult<PatientVisitHistoryResponse>> GetPatientVisitsAsync(
@@ -295,7 +349,10 @@ public class PatientVisitService : IPatientVisitService
             join patient in _dbContext.Users.AsNoTracking() on visit.PatientId equals patient.Id
             join doctor in _dbContext.Users.AsNoTracking() on visit.DoctorId equals doctor.Id
             join clinic in _dbContext.Clinics.AsNoTracking() on visit.ClinicId equals clinic.ClinicId
-            select new { visit, patient, doctor, clinic };
+            join feedback in _dbContext.PatientVisitFeedbacks.AsNoTracking()
+                on visit.PatientVisitId equals feedback.PatientVisitId into feedbackGroup
+            from feedback in feedbackGroup.DefaultIfEmpty()
+            select new { visit, patient, doctor, clinic, feedback };
 
         if (patientId is Guid pid)
         {
@@ -348,7 +405,14 @@ public class PatientVisitService : IPatientVisitService
                 x.visit.VisitAt,
                 x.visit.VisitType,
                 x.visit.PatientCondition,
-                x.visit.DoctorNotes))
+                x.visit.DoctorNotes,
+                x.feedback == null
+                    ? null
+                    : new VisitFeedbackDto(
+                        x.feedback.SatisfactionScore,
+                        x.feedback.DoctorCommunicationScore,
+                        x.feedback.Comment,
+                        x.feedback.CreatedAt)))
             .ToListAsync(cancellationToken);
 
         return AuthResult<PatientVisitHistoryResponse>.Success(
@@ -414,8 +478,11 @@ public class PatientVisitService : IPatientVisitService
             join patient in _dbContext.Users.AsNoTracking() on visit.PatientId equals patient.Id
             join doctor in _dbContext.Users.AsNoTracking() on visit.DoctorId equals doctor.Id
             join clinic in _dbContext.Clinics.AsNoTracking() on visit.ClinicId equals clinic.ClinicId
+            join feedback in _dbContext.PatientVisitFeedbacks.AsNoTracking()
+                on visit.PatientVisitId equals feedback.PatientVisitId into feedbackGroup
+            from feedback in feedbackGroup.DefaultIfEmpty()
             where visit.PatientId == patientId
-            select new { visit, patient, doctor, clinic };
+            select new { visit, patient, doctor, clinic, feedback };
 
         if (clinicId is not null)
         {
@@ -446,7 +513,14 @@ public class PatientVisitService : IPatientVisitService
                 x.visit.VisitAt,
                 x.visit.VisitType,
                 x.visit.PatientCondition,
-                x.visit.DoctorNotes))
+                x.visit.DoctorNotes,
+                x.feedback == null
+                    ? null
+                    : new VisitFeedbackDto(
+                        x.feedback.SatisfactionScore,
+                        x.feedback.DoctorCommunicationScore,
+                        x.feedback.Comment,
+                        x.feedback.CreatedAt)))
             .FirstOrDefaultAsync(cancellationToken);
 
         return AuthResult<PatientVisitDto?>.Success(recent);

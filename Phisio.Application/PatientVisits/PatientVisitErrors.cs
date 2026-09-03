@@ -12,5 +12,9 @@ public static class PatientVisitErrors
     public const string PatientNotConnectedToDoctor = "این بیمار به این پزشک متصل نیست";
 
     public const string VisitNotesMaxLengthExceeded = "یادداشت‌ها بیش از حد مجاز هستند";
+
+    public const string VisitNotFound = "ویزیت یافت نشد";
+    public const string FeedbackAlreadySubmitted = "بازخورد این ویزیت قبلاً ثبت شده است";
+    public const string FeedbackScoresRequired = "امتیازهای بازخورد الزامی هستند";
 }
 

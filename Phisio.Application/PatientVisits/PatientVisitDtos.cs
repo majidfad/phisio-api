@@ -13,7 +13,8 @@ public sealed record PatientVisitDto(
     DateTime VisitAt,
     VisitType? VisitType,
     PatientCondition? PatientCondition,
-    string? DoctorNotes);
+    string? DoctorNotes,
+    VisitFeedbackDto? Feedback);
 
 public sealed record PatientVisitHistoryResponse(
     IReadOnlyList<PatientVisitDto> Visits,

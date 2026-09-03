@@ -83,6 +83,41 @@ public class PatientVisitsController : ControllerBase
         return Ok(result.Value);
     }
 
+    [HttpPost("{visitId:guid}/feedback")]
+    [ProducesResponseType(typeof(VisitFeedbackDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SubmitVisitFeedback(
+        Guid visitId,
+        [FromBody] SubmitVisitFeedbackRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccessContext();
+        if (access is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _visitService.SubmitVisitFeedbackAsync(
+            access,
+            visitId,
+            request,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Contains(PatientVisitErrors.VisitNotFound))
+            {
+                return NotFound(new { errors = result.Errors });
+            }
+
+            return BadRequest(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
     private PatientVisitAccessContext? GetAccessContext()
     {
         var userId = User.GetUserId();

@@ -220,5 +220,70 @@ public sealed class PatientVisitIntegrationTests
         var payload = historyOk.Value.Should().BeOfType<PatientVisitHistoryResponse>().Which;
         payload.TotalVisits.Should().Be(2);
     }
+
+    [Fact]
+    public async Task SubmitVisitFeedback_AsPatient_SucceedsOnce_AndAppearsOnVisit()
+    {
+        await using var host = await RelationshipTestHost.CreateAsync(services =>
+        {
+            services.AddScoped<IPatientVisitService, PatientVisitService>();
+        });
+
+        var scenario = await RelationshipTestHostSeeder.SeedPatientDoctorClinicAsync(host);
+
+        host.DbContext.DoctorPatients.Add(
+            DoctorPatientBuilder.Create(
+                scenario.Doctor.Id,
+                scenario.Patient.Id,
+                scenario.ClinicAId));
+        await host.DbContext.SaveChangesAsync();
+
+        var doctorController = new VisitsController(host.GetRequiredService<IPatientVisitService>())
+        {
+            ControllerContext = RelationshipTestHost.CreateControllerContext(scenario.Doctor.Id, RoleNames.Doctor),
+        };
+
+        var registerResult = await doctorController.RegisterVisit(
+            new RegisterPatientVisitRequest(
+                PatientId: scenario.Patient.Id,
+                DoctorId: scenario.Doctor.Id,
+                ClinicId: scenario.ClinicAId,
+                VisitAt: DateTime.UtcNow,
+                VisitType: null,
+                PatientCondition: null,
+                DoctorNotes: "Session notes"),
+            default);
+
+        var visit = registerResult.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<PatientVisitDto>().Which;
+
+        var patientController = new PatientVisitsController(host.GetRequiredService<IPatientVisitService>())
+        {
+            ControllerContext = RelationshipTestHost.CreateControllerContext(scenario.Patient.Id, RoleNames.Patient),
+        };
+
+        var feedbackResult = await patientController.SubmitVisitFeedback(
+            visit.VisitId,
+            new SubmitVisitFeedbackRequest(4, 5, "Clear explanations"),
+            default);
+
+        var feedbackOk = feedbackResult.Should().BeOfType<OkObjectResult>().Subject;
+        var feedback = feedbackOk.Value.Should().BeOfType<VisitFeedbackDto>().Which;
+        feedback.SatisfactionScore.Should().Be(4);
+        feedback.DoctorCommunicationScore.Should().Be(5);
+
+        var duplicate = await patientController.SubmitVisitFeedback(
+            visit.VisitId,
+            new SubmitVisitFeedbackRequest(3, 3, null),
+            default);
+        duplicate.Should().BeOfType<BadRequestObjectResult>();
+
+        var historyResult = await patientController.GetMyVisits(cancellationToken: default);
+        var history = historyResult.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<PatientVisitHistoryResponse>().Which;
+        history.Visits.Should().ContainSingle();
+        history.Visits[0].Feedback.Should().NotBeNull();
+        history.Visits[0].Feedback!.SatisfactionScore.Should().Be(4);
+    }
 }
 
