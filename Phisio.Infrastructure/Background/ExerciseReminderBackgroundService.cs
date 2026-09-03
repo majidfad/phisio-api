@@ -18,7 +18,11 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
     private const string PrimarySlot = "primary";
     private const string FollowUpSlot = "followUp";
 
-    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
+    /// <summary>
+    /// Reminder eligibility is re-checked every minute so PreferredReminderTime is honored
+    /// within ~1 minute (not up to 15 minutes later).
+    /// </summary>
+    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExerciseReminderBackgroundService> _logger;
@@ -33,7 +37,8 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+        // Short initial delay so the host can finish startup, then poll every minute.
+        await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -84,6 +89,11 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
 
         if (assignments.Count == 0)
         {
+            _logger.LogDebug(
+                "Exercise reminder tick at {UtcNow:o}: no active assignments in {From}..{To}.",
+                utcNow,
+                scheduleFrom,
+                scheduleTo);
             return;
         }
 
@@ -100,6 +110,10 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
 
         if (patients.Count == 0)
         {
+            _logger.LogDebug(
+                "Exercise reminder tick at {UtcNow:o}: {AssignmentCount} assignments but no eligible patients with reminders enabled.",
+                utcNow,
+                assignments.Count);
             return;
         }
 
@@ -145,16 +159,34 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
 
             if (!settings.IsReminderDay(localToday))
             {
+                _logger.LogDebug(
+                    "Skip patient {PatientId}: {LocalToday} is not a reminder day (mode {Mode}).",
+                    patient.Id,
+                    localToday,
+                    patient.ReminderRepeatMode);
                 continue;
             }
 
+            // Assignments / completions are dated with UTC calendar days elsewhere in the app
+            // (PatientExerciseService, AssignmentService). Match that here so "today's"
+            // incomplete exercises are the same set the patient sees in the app.
+            // Prefer localToday when it equals utcToday (normal daytime); when they differ
+            // near midnight, still count either date so a pending row is not missed.
             var pendingCount = assignments.Count(a =>
                 a.PatientId == patient.Id
-                && a.ScheduledDate == localToday
-                && !completedSet.Contains((a.UserExerciseId, localToday)));
+                && (a.ScheduledDate == localToday || a.ScheduledDate == utcToday)
+                && !completedSet.Contains((a.UserExerciseId, a.ScheduledDate)));
 
             if (pendingCount == 0)
             {
+                _logger.LogInformation(
+                    "Skip patient {PatientId} at local {LocalTime} (tz {TimeZone}): no incomplete exercises for local {LocalToday} / utc {UtcToday}. PreferredReminderTime={Preferred}.",
+                    patient.Id,
+                    localTime,
+                    timeZone.Id,
+                    localToday,
+                    utcToday,
+                    patient.PreferredReminderTime);
                 continue;
             }
 
@@ -163,9 +195,21 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                 .ToList();
 
             var hasPrimary = patientReminders.Any(n =>
-                HasSlotForDate(n.Data, n.CreatedAt, localToday, timeZone, PrimarySlot));
+                HasSlotForDate(
+                    n.Data,
+                    n.CreatedAt,
+                    localToday,
+                    timeZone,
+                    PrimarySlot,
+                    patient.PreferredReminderTime));
             var hasFollowUp = patientReminders.Any(n =>
-                HasSlotForDate(n.Data, n.CreatedAt, localToday, timeZone, FollowUpSlot));
+                HasSlotForDate(
+                    n.Data,
+                    n.CreatedAt,
+                    localToday,
+                    timeZone,
+                    FollowUpSlot,
+                    patient.ReminderFollowUpTime));
 
             if (!hasPrimary && localTime >= settings.PreferredReminderTime)
             {
@@ -176,6 +220,27 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     PrimarySlot,
                     isFollowUp: false));
                 hasPrimary = true;
+                _logger.LogInformation(
+                    "Queue primary exercise reminder for patient {PatientId}: local {LocalTime} >= {Preferred}, pending={Pending}.",
+                    patient.Id,
+                    localTime,
+                    patient.PreferredReminderTime,
+                    pendingCount);
+            }
+            else if (!hasPrimary)
+            {
+                _logger.LogDebug(
+                    "Patient {PatientId}: waiting for preferred time (local {LocalTime} < {Preferred}).",
+                    patient.Id,
+                    localTime,
+                    patient.PreferredReminderTime);
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Patient {PatientId}: primary reminder already sent for {LocalToday}.",
+                    patient.Id,
+                    localToday);
             }
 
             if (settings.FollowUpEnabled
@@ -189,6 +254,11 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     localToday,
                     FollowUpSlot,
                     isFollowUp: true));
+                _logger.LogInformation(
+                    "Queue follow-up exercise reminder for patient {PatientId}: local {LocalTime} >= {FollowUp}.",
+                    patient.Id,
+                    localTime,
+                    patient.ReminderFollowUpTime);
             }
         }
 
@@ -233,11 +303,19 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
         DateTime createdAtUtc,
         DateOnly localToday,
         TimeZoneInfo timeZone,
-        string slot)
+        string slot,
+        TimeOnly scheduledTime)
     {
+        var createdLocal = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(createdAtUtc, DateTimeKind.Utc),
+            timeZone);
+        var wasCreatedAfterCurrentSchedule =
+            TimeOnly.FromDateTime(createdLocal) >= scheduledTime;
+
         if (!string.IsNullOrWhiteSpace(data)
             && data.Contains($"\"date\":\"{localToday:yyyy-MM-dd}\"", StringComparison.Ordinal)
-            && data.Contains($"\"slot\":\"{slot}\"", StringComparison.Ordinal))
+            && data.Contains($"\"slot\":\"{slot}\"", StringComparison.Ordinal)
+            && wasCreatedAfterCurrentSchedule)
         {
             return true;
         }
@@ -246,7 +324,8 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
         if (slot == PrimarySlot
             && !string.IsNullOrWhiteSpace(data)
             && data.Contains($"\"date\":\"{localToday:yyyy-MM-dd}\"", StringComparison.Ordinal)
-            && !data.Contains("\"slot\":", StringComparison.Ordinal))
+            && !data.Contains("\"slot\":", StringComparison.Ordinal)
+            && wasCreatedAfterCurrentSchedule)
         {
             return true;
         }
@@ -254,10 +333,8 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
         if (slot == PrimarySlot
             && (string.IsNullOrWhiteSpace(data) || !data.Contains("\"slot\":", StringComparison.Ordinal)))
         {
-            var createdLocal = TimeZoneInfo.ConvertTimeFromUtc(
-                DateTime.SpecifyKind(createdAtUtc, DateTimeKind.Utc),
-                timeZone);
-            return DateOnly.FromDateTime(createdLocal) == localToday;
+            return DateOnly.FromDateTime(createdLocal) == localToday
+                && wasCreatedAfterCurrentSchedule;
         }
 
         return false;

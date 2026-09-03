@@ -1,4 +1,4 @@
-# Reverse proxy for zivan.me
+# Reverse proxy for zivan.me (marketing) and app.zivan.me (authenticated app).
 # Public TLS is terminated by Cloudflare. Cloudflare connects to this origin over
 # HTTP (:80). This proxy forwards to the web container (:80), which serves the SPA
 # and proxies /api and /uploads to the API.
@@ -42,6 +42,8 @@ map $http_x_forwarded_proto $forwarded_proto {
     ''      https;
 }
 
+# Shared upstream settings (duplicated in each server — nginx includes are limited).
+# Marketing: zivan.me — bounce app paths to app.zivan.me
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -58,8 +60,49 @@ server {
         access_log off;
     }
 
+    # Auth + panels live on the app subdomain.
+    location ~ ^/(login|register|unauthorized|admin|clinic-manager|doctor|patient)(/|$) {
+        return 301 https://app.zivan.me$request_uri;
+    }
+
     # Resolve the web container name at request time so this proxy can start
     # even if the web container isn't up yet (avoids "host not found in upstream").
+    resolver 127.0.0.11 valid=30s;
+    set $upstream_web web;
+
+    location / {
+        proxy_pass http://$upstream_web:80;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}
+
+# App: app.zivan.me — bounce marketing paths to zivan.me
+server {
+    listen 80;
+    listen [::]:80;
+    server_name app.zivan.me;
+
+    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+    client_body_timeout 600s;
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+
+    location = /healthz {
+        return 200 "ok\n";
+        access_log off;
+    }
+
+    location ~ ^/(about|download|privacy|terms)(/|$) {
+        return 301 https://zivan.me$request_uri;
+    }
+
     resolver 127.0.0.11 valid=30s;
     set $upstream_web web;
 
