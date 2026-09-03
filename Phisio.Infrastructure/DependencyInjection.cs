@@ -23,6 +23,7 @@ using Phisio.Application.Patients;
 using Phisio.Application.Notifications;
 using Phisio.Application.PatientDailyFeedback;
 using Phisio.Application.PatientDoctors;
+using Phisio.Application.PatientVisits;
 using Phisio.Application.PatientExercises;
 using Phisio.Application.PatientSettings;
 using Phisio.Application.ReadModels;
@@ -112,6 +113,7 @@ public static class DependencyInjection
         services.AddScoped<IAssignmentService, AssignmentService>();
         services.AddScoped<IPatientExerciseService, PatientExerciseService>();
         services.AddScoped<IPatientDailyFeedbackService, PatientDailyFeedbackService>();
+        services.AddScoped<IPatientVisitService, PatientVisitService>();
         services.AddScoped<IPatientSettingsService, PatientSettingsService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
