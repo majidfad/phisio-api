@@ -54,6 +54,12 @@ internal static class DoctorPatientServiceTestFactory
                 hasActiveRelationship
                     ? AuthResult<bool>.Success(true)
                     : AuthResult<bool>.Failure(["Patient not found."]));
+        mock.Setup(service => service.EnsurePatientCanOpenCareLinkAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<Guid>(),
+                It.IsAny<Guid>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<bool>.Success(true));
         return mock.Object;
     }
 }

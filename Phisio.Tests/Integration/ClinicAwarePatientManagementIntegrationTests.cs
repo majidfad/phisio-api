@@ -76,7 +76,7 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
     }
 
     [Fact]
-    public async Task AddPatient_SamePatientDoctor_InTwoClinics_CreatesTwoRelationships()
+    public async Task AddPatient_SamePatientDoctor_InTwoClinics_RejectsSecondRelationship()
     {
         await using var host = await RelationshipTestHost.CreateAsync();
         var scenario = await RelationshipTestHostSeeder.SeedPatientDoctorClinicAsync(
@@ -87,15 +87,20 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
         (await controller.AddPatient(
             new AddDoctorPatientRequest(scenario.Patient.Id, scenario.ClinicAId),
             CancellationToken.None)).Should().BeOfType<OkObjectResult>();
-        (await controller.AddPatient(
+
+        var second = await controller.AddPatient(
             new AddDoctorPatientRequest(scenario.Patient.Id, scenario.ClinicBId),
-            CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+            CancellationToken.None);
+
+        second.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        ExtractErrors(((ObjectResult)second).Value)
+            .Should().Contain(DoctorPatientErrors.PatientAlreadyLinkedElsewhere);
 
         var links = await host.DbContext.DoctorPatients.IgnoreQueryFilters().ToListAsync();
-        links.Should().HaveCount(2);
-        links.Select(link => link.ClinicId).Should().BeEquivalentTo(
-            [scenario.ClinicAId, scenario.ClinicBId]);
-        links.Should().OnlyContain(link => link.Status == DoctorPatientStatus.Approved);
+        links.Should().ContainSingle();
+        links[0].ClinicId.Should().Be(scenario.ClinicAId);
+        links[0].Status.Should().Be(DoctorPatientStatus.Approved);
     }
 
     [Fact]
@@ -120,9 +125,11 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
         var scenario = await RelationshipTestHostSeeder.SeedPatientDoctorClinicAsync(
             host,
             includeSecondClinic: true);
+        var otherPatient = ApplicationUserBuilder.Patient(name: "Other Patient", phoneNumber: "+15551000999");
+        host.DbContext.Users.Add(otherPatient);
         host.DbContext.DoctorPatients.AddRange(
             DoctorPatientBuilder.Create(scenario.Doctor.Id, scenario.Patient.Id, scenario.ClinicAId),
-            DoctorPatientBuilder.Create(scenario.Doctor.Id, scenario.Patient.Id, scenario.ClinicBId));
+            DoctorPatientBuilder.Create(scenario.Doctor.Id, otherPatient.Id, scenario.ClinicBId));
         await host.DbContext.SaveChangesAsync();
 
         var controller = host.CreateDoctorPatientsController(scenario.Doctor.Id);
@@ -137,6 +144,7 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
             .Should().BeAssignableTo<IReadOnlyList<DoctorPatientDto>>().Subject;
         patients.Should().ContainSingle();
         patients.Single().ClinicId.Should().Be(scenario.ClinicAId);
+        patients.Single().PatientId.Should().Be(scenario.Patient.Id);
         patients.Single().ClinicName.Should().Be(scenario.ClinicA.Name);
     }
 
@@ -147,6 +155,8 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
         var scenario = await RelationshipTestHostSeeder.SeedPatientDoctorClinicAsync(
             host,
             includeSecondClinic: true);
+        var otherPatient = ApplicationUserBuilder.Patient(name: "Other Patient", phoneNumber: "+15551000999");
+        host.DbContext.Users.Add(otherPatient);
         host.DbContext.DoctorPatients.AddRange(
             DoctorPatientBuilder.Create(
                 scenario.Doctor.Id,
@@ -155,7 +165,7 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
                 status: DoctorPatientStatus.Pending),
             DoctorPatientBuilder.Create(
                 scenario.Doctor.Id,
-                scenario.Patient.Id,
+                otherPatient.Id,
                 scenario.ClinicBId,
                 status: DoctorPatientStatus.Pending));
         await host.DbContext.SaveChangesAsync();
@@ -167,6 +177,7 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
             .Should().BeAssignableTo<IReadOnlyList<DoctorPatientRequestDto>>().Subject;
         requests.Should().ContainSingle();
         requests.Single().ClinicId.Should().Be(scenario.ClinicBId);
+        requests.Single().PatientId.Should().Be(otherPatient.Id);
         requests.Single().ClinicName.Should().Be(scenario.ClinicB!.Name);
     }
 
@@ -177,11 +188,13 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
         var scenario = await RelationshipTestHostSeeder.SeedPatientDoctorClinicAsync(
             host,
             includeSecondClinic: true);
+        var pendingPatient = ApplicationUserBuilder.Patient(name: "Pending Patient", phoneNumber: "+15551000888");
+        host.DbContext.Users.Add(pendingPatient);
         host.DbContext.DoctorPatients.AddRange(
             DoctorPatientBuilder.Create(scenario.Doctor.Id, scenario.Patient.Id, scenario.ClinicAId),
             DoctorPatientBuilder.Create(
                 scenario.Doctor.Id,
-                scenario.Patient.Id,
+                pendingPatient.Id,
                 scenario.ClinicBId,
                 status: DoctorPatientStatus.Pending));
         await host.DbContext.SaveChangesAsync();
@@ -333,5 +346,36 @@ public sealed class ClinicAwarePatientManagementIntegrationTests
         var exercises = result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeAssignableTo<IReadOnlyList<DoctorPatientExerciseDto>>().Subject;
         exercises.Should().ContainSingle();
+    }
+
+    private static IReadOnlyList<string> ExtractErrors(object? value)
+    {
+        if (value is null)
+        {
+            return [];
+        }
+
+        var errorsProperty = value.GetType().GetProperty("errors")
+            ?? value.GetType().GetProperty("Errors");
+        var raw = errorsProperty?.GetValue(value);
+        if (raw is null)
+        {
+            return [];
+        }
+
+        if (raw is IEnumerable<string> stringErrors)
+        {
+            return stringErrors.ToList();
+        }
+
+        if (raw is System.Collections.IEnumerable enumerable)
+        {
+            return enumerable.Cast<object>()
+                .Select(item => item?.ToString() ?? string.Empty)
+                .Where(item => item.Length > 0)
+                .ToList();
+        }
+
+        return [];
     }
 }

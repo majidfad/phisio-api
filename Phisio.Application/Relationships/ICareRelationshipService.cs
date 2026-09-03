@@ -62,4 +62,14 @@ public interface ICareRelationshipService
         Guid patientId,
         Guid? clinicId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ensures the patient has no other approved/pending care link
+    /// (excluding the given doctor+clinic pair being opened or reopened).
+    /// </summary>
+    Task<AuthResult<bool>> EnsurePatientCanOpenCareLinkAsync(
+        Guid patientId,
+        Guid doctorId,
+        Guid clinicId,
+        CancellationToken cancellationToken = default);
 }

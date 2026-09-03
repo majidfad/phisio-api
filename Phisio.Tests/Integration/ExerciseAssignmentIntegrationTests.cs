@@ -489,31 +489,38 @@ public sealed class ExerciseAssignmentIntegrationTests
         assignment.ClinicId.Should().Be(scenario.ClinicAId);
     }
 
-    // 22. Multi-clinic: assignments are scoped by ClinicId.
+    // 22. Multi-clinic: assignment requires an approved link in that clinic.
     [Fact]
-    public async Task CreateAssignment_WhenApprovedLinksExistInMultipleClinics_CreatesClinicScopedAssignment()
+    public async Task CreateAssignment_WhenPatientOnlyLinkedInOneClinic_RejectsOtherClinic()
     {
         await using var host = await ExerciseManagementTestHost.CreateAsync();
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host, includeSecondClinic: true);
         var controller = host.CreateAssignmentsController(scenario.Doctor.Id, RoleNames.Doctor);
-        var request = ExerciseManagementTestHelpers.CreateAssignmentRequest(
-            scenario.Patient.Id,
-            scenario.AdminExercise.ExerciseId,
-            scenario.ClinicAId);
 
-        await controller.CreateAssignment(request, CancellationToken.None);
+        (await controller.CreateAssignment(
+            ExerciseManagementTestHelpers.CreateAssignmentRequest(
+                scenario.Patient.Id,
+                scenario.AdminExercise.ExerciseId,
+                scenario.ClinicAId),
+            CancellationToken.None)).Should().BeOfType<CreatedAtActionResult>();
 
+        var otherClinic = await controller.CreateAssignment(
+            ExerciseManagementTestHelpers.CreateAssignmentRequest(
+                scenario.Patient.Id,
+                scenario.AdminExercise.ExerciseId,
+                scenario.ClinicBId),
+            CancellationToken.None);
+
+        otherClinic.Should().BeOfType<BadRequestObjectResult>();
         host.DbContext.ChangeTracker.Clear();
         var links = await host.DbContext.DoctorPatients
             .Where(link => link.DoctorId == scenario.Doctor.Id && link.PatientId == scenario.Patient.Id)
             .ToListAsync();
-        links.Should().HaveCount(2);
-        links.Select(link => link.ClinicId).Should().BeEquivalentTo([scenario.ClinicAId, scenario.ClinicBId]);
+        links.Should().ContainSingle();
+        links[0].ClinicId.Should().Be(scenario.ClinicAId);
 
         var assignments = await host.DbContext.UserExercises.ToListAsync();
         assignments.Should().ContainSingle();
-        assignments[0].DoctorId.Should().Be(scenario.Doctor.Id);
-        assignments[0].PatientId.Should().Be(scenario.Patient.Id);
         assignments[0].ClinicId.Should().Be(scenario.ClinicAId);
     }
 

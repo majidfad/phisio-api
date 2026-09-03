@@ -203,9 +203,9 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
         (await host.DbContext.DoctorPatients.IgnoreQueryFilters().CountAsync()).Should().Be(1);
     }
 
-    // 7. Same Patient + Doctor in different clinics
+    // 7. Same Patient + Doctor in different clinics — only one open link allowed
     [Fact]
-    public async Task RequestLink_SamePatientAndDoctor_InDifferentClinics_CreatesTwoRecords()
+    public async Task RequestLink_SamePatientAndDoctor_InDifferentClinics_RejectsSecondLink()
     {
         await using var host = await RelationshipTestHost.CreateAsync();
         var scenario = await RelationshipTestHostSeeder.SeedPatientDoctorClinicAsync(
@@ -218,19 +218,15 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
             new RequestPatientDoctorLinkDto(scenario.ClinicAId),
             CancellationToken.None)).Should().BeOfType<OkObjectResult>();
 
-        (await controller.RequestLink(
+        var second = await controller.RequestLink(
             scenario.Doctor.Id,
             new RequestPatientDoctorLinkDto(scenario.ClinicBId),
-            CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+            CancellationToken.None);
 
-        var links = await host.DbContext.DoctorPatients.IgnoreQueryFilters().ToListAsync();
-        links.Should().HaveCount(2);
-        links.Select(link => link.ClinicId).Should().BeEquivalentTo(
-            [scenario.ClinicAId, scenario.ClinicBId]);
-        links.Should().OnlyContain(link =>
-            link.PatientId == scenario.Patient.Id &&
-            link.DoctorId == scenario.Doctor.Id &&
-            link.Status == DoctorPatientStatus.Pending);
+        var badRequest = second.Should().BeOfType<ObjectResult>().Subject;
+        badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        ExtractErrors(badRequest.Value).Should().Contain(DoctorPatientErrors.PatientAlreadyLinkedElsewhere);
+        (await host.DbContext.DoctorPatients.IgnoreQueryFilters().CountAsync()).Should().Be(1);
     }
 
     // 8. Approve pending connection
@@ -388,7 +384,7 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
             .IsEnabled.Should().BeFalse();
     }
 
-    // 12. Patient's connected doctors (with clinic info; multi-clinic)
+    // 12. Patient's connected doctors (with clinic info)
     [Fact]
     public async Task GetMyDoctors_ReturnsConnectedDoctorsWithCorrectClinicInfo()
     {
@@ -405,11 +401,6 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
                 scenario.ClinicAId,
                 status: DoctorPatientStatus.Approved),
             DoctorPatientBuilder.Create(
-                scenario.Doctor.Id,
-                scenario.Patient.Id,
-                scenario.ClinicBId,
-                status: DoctorPatientStatus.Pending),
-            DoctorPatientBuilder.Create(
                 otherDoctor.Id,
                 Guid.NewGuid(),
                 scenario.ClinicAId,
@@ -422,17 +413,14 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
         var doctors = result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeAssignableTo<IReadOnlyList<PatientLinkedDoctorDto>>().Subject;
 
-        doctors.Should().HaveCount(2);
-        doctors.Should().OnlyContain(item => item.DoctorId == scenario.Doctor.Id);
-        doctors.Select(item => item.ClinicId).Should().BeEquivalentTo(
-            [scenario.ClinicAId, scenario.ClinicBId]);
-        doctors.Single(item => item.ClinicId == scenario.ClinicAId).ClinicName.Should().Be(scenario.ClinicA.Name);
-        doctors.Single(item => item.ClinicId == scenario.ClinicBId).ClinicName.Should().Be(scenario.ClinicB!.Name);
-        doctors.Single(item => item.ClinicId == scenario.ClinicAId).Status.Should().Be(DoctorPatientStatus.Approved);
-        doctors.Single(item => item.ClinicId == scenario.ClinicBId).Status.Should().Be(DoctorPatientStatus.Pending);
+        doctors.Should().ContainSingle();
+        doctors[0].DoctorId.Should().Be(scenario.Doctor.Id);
+        doctors[0].ClinicId.Should().Be(scenario.ClinicAId);
+        doctors[0].ClinicName.Should().Be(scenario.ClinicA.Name);
+        doctors[0].Status.Should().Be(DoctorPatientStatus.Approved);
     }
 
-    // 13. Doctor's connected patients (with clinic info; multi-clinic)
+    // 13. Doctor's connected patients (with clinic info; multi-clinic via different patients)
     [Fact]
     public async Task GetPatients_ReturnsConnectedPatientsWithCorrectClinicInfo()
     {
@@ -451,7 +439,7 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
                 status: DoctorPatientStatus.Approved),
             DoctorPatientBuilder.Create(
                 scenario.Doctor.Id,
-                scenario.Patient.Id,
+                otherPatient.Id,
                 scenario.ClinicBId,
                 status: DoctorPatientStatus.Approved),
             DoctorPatientBuilder.Create(
@@ -468,9 +456,10 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
             .Value.Should().BeAssignableTo<IReadOnlyList<DoctorPatientDto>>().Subject;
 
         patients.Should().HaveCount(2);
-        patients.Should().OnlyContain(item => item.PatientId == scenario.Patient.Id);
         patients.Select(item => item.ClinicId).Should().BeEquivalentTo(
             [scenario.ClinicAId, scenario.ClinicBId]);
+        patients.Single(item => item.ClinicId == scenario.ClinicAId).PatientId.Should().Be(scenario.Patient.Id);
+        patients.Single(item => item.ClinicId == scenario.ClinicBId).PatientId.Should().Be(otherPatient.Id);
         patients.Single(item => item.ClinicId == scenario.ClinicAId).ClinicName.Should().Be(scenario.ClinicA.Name);
         patients.Single(item => item.ClinicId == scenario.ClinicBId).ClinicName.Should().Be(scenario.ClinicB!.Name);
     }
@@ -624,17 +613,19 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
             scenario.Doctor.Id,
             new RequestPatientDoctorLinkDto(scenario.ClinicAId),
             CancellationToken.None);
-        await patientController.RequestLink(
+        var rejectedSecond = await patientController.RequestLink(
             scenario.Doctor.Id,
             new RequestPatientDoctorLinkDto(scenario.ClinicBId),
             CancellationToken.None);
+        rejectedSecond.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         await doctorController.ApproveRequest(
             scenario.Patient.Id,
             scenario.ClinicAId,
             CancellationToken.None);
 
         var links = await host.DbContext.DoctorPatients.IgnoreQueryFilters().ToListAsync();
-        links.Should().HaveCount(2);
+        links.Should().ContainSingle();
         links.Select(link => (link.PatientId, link.DoctorId, link.ClinicId))
             .Should().OnlyHaveUniqueItems();
 
@@ -643,10 +634,9 @@ public sealed class PatientDoctorClinicRelationshipIntegrationTests
             await AssertForeignKeysExistAsync(host, link);
         }
 
-        var approved = links.Single(link => link.ClinicId == scenario.ClinicAId);
+        var approved = links.Single();
+        approved.ClinicId.Should().Be(scenario.ClinicAId);
         approved.Status.Should().Be(DoctorPatientStatus.Approved);
-        var pending = links.Single(link => link.ClinicId == scenario.ClinicBId);
-        pending.Status.Should().Be(DoctorPatientStatus.Pending);
 
         // Unique constraint key is the composite primary key (PatientId, DoctorId, ClinicId).
         var entityType = host.DbContext.Model.FindEntityType(typeof(DoctorPatient));

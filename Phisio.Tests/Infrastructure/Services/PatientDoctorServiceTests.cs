@@ -192,7 +192,7 @@ public class PatientDoctorServiceTests
     }
 
     [Fact]
-    public async Task RequestLinkAsync_AllowsSameDoctorInDifferentClinics()
+    public async Task RequestLinkAsync_WhenPatientAlreadyLinkedElsewhere_ReturnsFailure()
     {
         var patient = ApplicationUserBuilder.Patient();
         var doctor = ApplicationUserBuilder.Doctor();
@@ -215,8 +215,9 @@ public class PatientDoctorServiceTests
 
         var result = await sut.RequestLinkAsync(patient.Id, doctor.Id, secondClinic.ClinicId);
 
-        result.Succeeded.Should().BeTrue();
-        dbContext.Object.DoctorPatients.IgnoreQueryFilters().Should().HaveCount(2);
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().Contain(DoctorPatientErrors.PatientAlreadyLinkedElsewhere);
+        dbContext.Object.DoctorPatients.IgnoreQueryFilters().Should().HaveCount(1);
     }
 
     [Fact]

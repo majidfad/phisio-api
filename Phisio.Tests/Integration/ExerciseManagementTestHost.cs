@@ -280,15 +280,6 @@ internal static class ExerciseManagementTestHostSeeder
             clinicA.ClinicId,
             status: DoctorPatientStatus.Approved));
 
-        if (clinicB is not null)
-        {
-            host.DbContext.DoctorPatients.Add(DoctorPatientBuilder.Create(
-                doctor.Id,
-                patient.Id,
-                clinicB.ClinicId,
-                status: DoctorPatientStatus.Approved));
-        }
-
         var adminExercise = ExerciseBuilder.Create(title: "Admin Catalog Stretch");
         var doctorExercise = ExerciseBuilder.Create(
             title: "Doctor Custom Stretch",

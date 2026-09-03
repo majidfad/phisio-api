@@ -14,7 +14,7 @@ namespace Phisio.Tests.Integration;
 public sealed class ClinicAwareCareIntegrationTests
 {
     [Fact]
-    public async Task AssignPatientExercises_InTwoClinics_CreatesSeparateClinicScopedRows()
+    public async Task AssignPatientExercises_WhenPatientLinkedToOtherClinic_Rejects()
     {
         await using var host = await ExerciseManagementTestHost.CreateAsync();
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host, includeSecondClinic: true);
@@ -29,24 +29,21 @@ public sealed class ClinicAwareCareIntegrationTests
             scenario.ClinicAId,
             CancellationToken.None)).Should().BeOfType<OkObjectResult>();
 
-        (await controller.AssignPatientExercises(
+        var otherClinicResult = await controller.AssignPatientExercises(
             scenario.Patient.Id,
             request,
             scenario.ClinicBId,
-            CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+            CancellationToken.None);
 
+        otherClinicResult.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         host.DbContext.ChangeTracker.Clear();
-        var assignments = await host.DbContext.UserExercises
-            .OrderBy(assignment => assignment.ClinicId)
-            .ToListAsync();
-
-        assignments.Should().HaveCount(2);
-        assignments.Select(assignment => assignment.ClinicId).Should().BeEquivalentTo(
-            [scenario.ClinicAId, scenario.ClinicBId]);
+        (await host.DbContext.UserExercises.CountAsync()).Should().Be(1);
+        (await host.DbContext.UserExercises.SingleAsync()).ClinicId.Should().Be(scenario.ClinicAId);
     }
 
     [Fact]
-    public async Task GetTodayExercises_WhenFilteredByClinic_ReturnsOnlyThatClinicAssignments()
+    public async Task GetTodayExercises_WhenFilteredByClinic_ReturnsOnlyMatchingClinic()
     {
         await using var host = await ExerciseManagementTestHost.CreateAsync();
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host, includeSecondClinic: true);
@@ -59,14 +56,6 @@ public sealed class ClinicAwareCareIntegrationTests
             scenario.Patient.Id,
             request,
             scenario.ClinicAId,
-            CancellationToken.None);
-
-        await doctorController.AssignPatientExercises(
-            scenario.Patient.Id,
-            new AssignPatientExercisesRequest(
-                [new AssignPatientExerciseItem(scenario.DoctorExercise2.ExerciseId, Sets: 1, Reps: "5", null, null)],
-                [ExerciseManagementTestHelpers.Today]),
-            scenario.ClinicBId,
             CancellationToken.None);
 
         var patientController = host.CreatePatientExercisesController(scenario.Patient.Id);
@@ -90,10 +79,7 @@ public sealed class ClinicAwareCareIntegrationTests
         var clinicBBody = clinicBOnly.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<PatientTodayExercisesResponse>().Subject;
 
-        clinicBBody.DoctorGroups.Should().ContainSingle();
-        clinicBBody.DoctorGroups[0].ClinicId.Should().Be(scenario.ClinicBId);
-        clinicBBody.DoctorGroups[0].Exercises.Should().ContainSingle()
-            .Which.ExerciseId.Should().Be(scenario.DoctorExercise2.ExerciseId);
+        clinicBBody.DoctorGroups.Should().BeEmpty();
     }
 
     [Fact]
@@ -138,7 +124,7 @@ public sealed class ClinicAwareCareIntegrationTests
             item.DoctorId == scenario.Doctor.Id
             && item.PatientId == scenario.Patient.Id
             && item.ClinicId == scenario.ClinicAId);
-        host.DbContext.DoctorPatients.Remove(link);
+        link.IsEnabled = false;
         await host.DbContext.SaveChangesAsync();
 
         var result = await assignmentsController.DeactivateAssignment(
@@ -146,6 +132,5 @@ public sealed class ClinicAwareCareIntegrationTests
             CancellationToken.None);
 
         result.Should().BeOfType<NotFoundObjectResult>();
-        (await host.DbContext.UserExercises.SingleAsync()).IsActive.Should().BeTrue();
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorPatients;
 using Phisio.Application.PatientDoctors;
+using Phisio.Application.Relationships;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Domain.Events;
@@ -14,14 +15,18 @@ namespace Phisio.Infrastructure.Services;
 public class PatientDoctorService : IPatientDoctorService
 {
     private readonly AppDbContext _dbContext;
+    private readonly ICareRelationshipService _careRelationships;
     private readonly IDomainEventDispatcher _domainEvents;
 
     public PatientDoctorService(
         AppDbContext dbContext,
+        ICareRelationshipService? careRelationships = null,
         IDomainEventDispatcher? domainEvents = null)
     {
         _dbContext = dbContext;
         _domainEvents = domainEvents ?? NoOpDomainEventDispatcher.Instance;
+        _careRelationships = careRelationships
+            ?? new CareRelationshipService(dbContext, _domainEvents);
     }
 
     public async Task<AuthResult<IReadOnlyList<PatientDoctorDirectoryItemDto>>> SearchDoctorsAsync(
@@ -304,6 +309,16 @@ public class PatientDoctorService : IPatientDoctorService
         if (existing is { IsEnabled: true, Status: DoctorPatientStatus.Pending })
         {
             return AuthResult<PatientLinkedDoctorDto>.Failure([DoctorPatientErrors.AlreadyRequested]);
+        }
+
+        var availability = await _careRelationships.EnsurePatientCanOpenCareLinkAsync(
+            patientId,
+            doctorId,
+            clinicId,
+            cancellationToken);
+        if (!availability.Succeeded)
+        {
+            return AuthResult<PatientLinkedDoctorDto>.Failure(availability.Errors);
         }
 
         var now = DateTime.UtcNow;

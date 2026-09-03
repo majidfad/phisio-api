@@ -227,6 +227,16 @@ public sealed class CareRelationshipService : ICareRelationshipService
             return AuthResult<DoctorPatientDto>.Failure([DoctorPatientErrors.AlreadyLinked]);
         }
 
+        var availability = await EnsurePatientCanOpenCareLinkAsync(
+            patientId,
+            doctorId,
+            clinicId,
+            cancellationToken);
+        if (!availability.Succeeded)
+        {
+            return AuthResult<DoctorPatientDto>.Failure(availability.Errors);
+        }
+
         var now = DateTime.UtcNow;
         if (existing is not null)
         {
@@ -287,6 +297,16 @@ public sealed class CareRelationshipService : ICareRelationshipService
         if (patient is null)
         {
             return AuthResult<DoctorPatientDto>.Failure([PatientNotFoundError]);
+        }
+
+        var availability = await EnsurePatientCanOpenCareLinkAsync(
+            patientId,
+            doctorId,
+            clinicId,
+            cancellationToken);
+        if (!availability.Succeeded)
+        {
+            return AuthResult<DoctorPatientDto>.Failure(availability.Errors);
         }
 
         var approvedAt = DateTime.UtcNow;
@@ -418,6 +438,28 @@ public sealed class CareRelationshipService : ICareRelationshipService
             .AnyAsync(
                 dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
                 cancellationToken);
+
+    public async Task<AuthResult<bool>> EnsurePatientCanOpenCareLinkAsync(
+        Guid patientId,
+        Guid doctorId,
+        Guid clinicId,
+        CancellationToken cancellationToken = default)
+    {
+        var hasOtherOpenCare = await _dbContext.DoctorPatients
+            .AsNoTracking()
+            .WhereOpenCare()
+            .AnyAsync(
+                dp => dp.PatientId == patientId
+                    && !(dp.DoctorId == doctorId && dp.ClinicId == clinicId),
+                cancellationToken);
+
+        if (hasOtherOpenCare)
+        {
+            return AuthResult<bool>.Failure([DoctorPatientErrors.PatientAlreadyLinkedElsewhere]);
+        }
+
+        return AuthResult<bool>.Success(true);
+    }
 
     private async Task<AuthResult<Clinic>> ValidateDoctorClinicMembershipAsync(
         Guid doctorId,

@@ -449,7 +449,7 @@ public class DoctorPatientServiceClinicFilterAndAddTests
     }
 
     [Fact]
-    public async Task AddPatientAsync_SamePatientInSecondClinic_CreatesSecondRelationship()
+    public async Task AddPatientAsync_WhenPatientAlreadyLinkedElsewhere_ReturnsFailure()
     {
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
@@ -470,9 +470,9 @@ public class DoctorPatientServiceClinicFilterAndAddTests
 
         var result = await sut.AddPatientAsync(doctor.Id, patient.Id, secondClinic.ClinicId);
 
-        result.Succeeded.Should().BeTrue();
-        result.Value!.ClinicId.Should().Be(secondClinic.ClinicId);
-        dbContext.Object.DoctorPatients.Should().HaveCount(2);
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().Contain(DoctorPatientErrors.PatientAlreadyLinkedElsewhere);
+        dbContext.Object.DoctorPatients.Should().HaveCount(1);
     }
 
     [Fact]

@@ -6,7 +6,6 @@ using Phisio.Application.Notifications;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
-using Phisio.Infrastructure.Services;
 
 namespace Phisio.Infrastructure.Background;
 
@@ -163,7 +162,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     "Skip patient {PatientId}: {LocalToday} is not a reminder day (mode {Mode}).",
                     patient.Id,
                     localToday,
-                    patient.ReminderRepeatMode);
+                    settings.RepeatMode);
                 continue;
             }
 
@@ -186,7 +185,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     timeZone.Id,
                     localToday,
                     utcToday,
-                    patient.PreferredReminderTime);
+                    settings.PreferredReminderTime);
                 continue;
             }
 
@@ -201,7 +200,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     localToday,
                     timeZone,
                     PrimarySlot,
-                    patient.PreferredReminderTime));
+                    settings.PreferredReminderTime));
             var hasFollowUp = patientReminders.Any(n =>
                 HasSlotForDate(
                     n.Data,
@@ -209,7 +208,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     localToday,
                     timeZone,
                     FollowUpSlot,
-                    patient.ReminderFollowUpTime));
+                    settings.FollowUpTime));
 
             if (!hasPrimary && localTime >= settings.PreferredReminderTime)
             {
@@ -224,7 +223,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     "Queue primary exercise reminder for patient {PatientId}: local {LocalTime} >= {Preferred}, pending={Pending}.",
                     patient.Id,
                     localTime,
-                    patient.PreferredReminderTime,
+                    settings.PreferredReminderTime,
                     pendingCount);
             }
             else if (!hasPrimary)
@@ -233,7 +232,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     "Patient {PatientId}: waiting for preferred time (local {LocalTime} < {Preferred}).",
                     patient.Id,
                     localTime,
-                    patient.PreferredReminderTime);
+                    settings.PreferredReminderTime);
             }
             else
             {
@@ -258,7 +257,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                     "Queue follow-up exercise reminder for patient {PatientId}: local {LocalTime} >= {FollowUp}.",
                     patient.Id,
                     localTime,
-                    patient.ReminderFollowUpTime);
+                    settings.FollowUpTime);
             }
         }
 

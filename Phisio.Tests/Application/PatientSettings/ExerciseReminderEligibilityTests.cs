@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Phisio.Application.PatientSettings;
 using Phisio.Domain.Enums;
+using Phisio.Domain.Settings;
 using Phisio.Infrastructure.Background;
 using System.Reflection;
 
