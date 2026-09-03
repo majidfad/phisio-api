@@ -28,8 +28,10 @@ using Phisio.Infrastructure.Background;
 using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 using Phisio.Infrastructure.Persistence.Seeding;
+using Phisio.Infrastructure.Events;
 using Phisio.Infrastructure.Push;
 using Phisio.Infrastructure.Services;
+using Phisio.Application.Common;
 
 namespace Phisio.Infrastructure;
 
@@ -84,6 +86,8 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAdminDashboardService, AdminDashboardService>();
         services.AddScoped<IPatientService, PatientService>();
+        services.AddScoped<CareDomainEventNotificationHandler>();
+        services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddScoped<IDoctorPatientService, DoctorPatientService>();
         services.AddScoped<IPatientDoctorService, PatientDoctorService>();
         services.AddScoped<IDoctorDashboardService, DoctorDashboardService>();
