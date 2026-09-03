@@ -2,6 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Admin.Assignments;
 using Phisio.Application.Assignments;
 using Phisio.Application.Common;
+using Phisio.Application.DoctorPatients;
+using Phisio.Application.Relationships;
+using Phisio.Domain.Common;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Persistence;
@@ -11,22 +14,35 @@ namespace Phisio.Infrastructure.Services;
 public class AssignmentService : IAssignmentService
 {
     private readonly AppDbContext _dbContext;
+    private readonly ICareRelationshipService _careRelationships;
 
-    public AssignmentService(AppDbContext dbContext)
+    public AssignmentService(
+        AppDbContext dbContext,
+        ICareRelationshipService careRelationships)
     {
         _dbContext = dbContext;
+        _careRelationships = careRelationships;
     }
 
+    /// <summary>
+    /// Legacy assignment API. Assignments are clinic-scoped via UserExercise.ClinicId.
+    /// </summary>
     public async Task<AuthResult<AssignmentDto>> CreateAsync(
         Guid doctorId,
         CreateAssignmentRequest request,
         CancellationToken cancellationToken = default)
     {
-        var hasDoctorPatientLink = await _dbContext.DoctorPatients
-            .WhereActive()
-            .AnyAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == request.PatientId,
-                cancellationToken);
+        var clinicId = request.ClinicId;
+        if (clinicId == Guid.Empty)
+        {
+            return AuthResult<AssignmentDto>.Failure([DoctorPatientErrors.ClinicRequired]);
+        }
+
+        var hasDoctorPatientLink = await _careRelationships.HasActiveRelationshipAsync(
+            doctorId,
+            request.PatientId,
+            clinicId,
+            cancellationToken);
 
         if (!hasDoctorPatientLink)
         {
@@ -49,6 +65,7 @@ public class AssignmentService : IAssignmentService
             .FirstOrDefaultAsync(
                 ue => ue.PatientId == request.PatientId
                     && ue.DoctorId == doctorId
+                    && ue.ClinicId == clinicId
                     && ue.ExerciseId == request.ExerciseId
                     && ue.ScheduledDate == today
                     && ue.IsActive
@@ -63,16 +80,11 @@ public class AssignmentService : IAssignmentService
             return AuthResult<AssignmentDto>.Success(MapToDto(existingActive, exercise.Title));
         }
 
-        var assignment = new UserExercise
-        {
-            UserExerciseId = Guid.NewGuid(),
-            DoctorId = doctorId,
-            PatientId = request.PatientId,
-            ExerciseId = request.ExerciseId,
-            AssignedAt = DateTime.UtcNow,
-            ScheduledDate = today,
-            IsActive = true
-        };
+        var assignment = UserExercise.CreateAdHoc(
+            CareContext.From(doctorId, request.PatientId, clinicId),
+            request.ExerciseId,
+            today,
+            DateTime.UtcNow);
 
         _dbContext.UserExercises.Add(assignment);
 
@@ -88,6 +100,7 @@ public class AssignmentService : IAssignmentService
                 .FirstOrDefaultAsync(
                     ue => ue.PatientId == request.PatientId
                         && ue.DoctorId == doctorId
+                        && ue.ClinicId == clinicId
                         && ue.ExerciseId == request.ExerciseId
                         && ue.ScheduledDate == today
                         && ue.IsActive
@@ -109,13 +122,19 @@ public class AssignmentService : IAssignmentService
     public async Task<AuthResult<IReadOnlyList<AssignmentDto>>> GetByPatientIdAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default)
     {
+        if (clinicId == Guid.Empty)
+        {
+            return AuthResult<IReadOnlyList<AssignmentDto>>.Failure([DoctorPatientErrors.ClinicRequired]);
+        }
+
         var hasDoctorPatientLink = await _dbContext.DoctorPatients
             .AsNoTracking()
             .WhereActive()
             .AnyAsync(
-                dp => dp.DoctorId == doctorId && dp.PatientId == patientId,
+                dp => dp.DoctorId == doctorId && dp.PatientId == patientId && dp.ClinicId == clinicId,
                 cancellationToken);
 
         if (!hasDoctorPatientLink)
@@ -126,7 +145,7 @@ public class AssignmentService : IAssignmentService
 
         var assignments = await _dbContext.UserExercises
             .AsNoTracking()
-            .Where(ue => ue.DoctorId == doctorId && ue.PatientId == patientId)
+            .Where(ue => ue.DoctorId == doctorId && ue.PatientId == patientId && ue.ClinicId == clinicId)
             .Join(
                 _dbContext.Exercises.AsNoTracking(),
                 ue => ue.ExerciseId,
@@ -167,6 +186,19 @@ public class AssignmentService : IAssignmentService
             .FirstOrDefaultAsync(ue => ue.UserExerciseId == assignmentId, cancellationToken);
 
         if (assignment is null || assignment.DoctorId != doctorId)
+        {
+            return AuthResult<bool>.Failure(["Assignment not found."]);
+        }
+
+        var hasClinicAccess = await _dbContext.DoctorPatients
+            .WhereActive()
+            .AnyAsync(
+                dp => dp.DoctorId == doctorId
+                    && dp.PatientId == assignment.PatientId
+                    && dp.ClinicId == assignment.ClinicId,
+                cancellationToken);
+
+        if (!hasClinicAccess)
         {
             return AuthResult<bool>.Failure(["Assignment not found."]);
         }
@@ -218,6 +250,7 @@ public class AssignmentService : IAssignmentService
             assignment.UserExerciseId,
             assignment.DoctorId,
             assignment.PatientId,
+            assignment.ClinicId,
             assignment.ExerciseId,
             exerciseTitle,
             assignment.AssignedAt,

@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorPatients;
-using Phisio.Application.Notifications;
 using Phisio.Application.PatientDoctors;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
+using Phisio.Domain.Events;
+using Phisio.Infrastructure.Events;
 using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 
@@ -13,14 +14,14 @@ namespace Phisio.Infrastructure.Services;
 public class PatientDoctorService : IPatientDoctorService
 {
     private readonly AppDbContext _dbContext;
-    private readonly INotificationService _notifications;
+    private readonly IDomainEventDispatcher _domainEvents;
 
     public PatientDoctorService(
         AppDbContext dbContext,
-        INotificationService? notifications = null)
+        IDomainEventDispatcher? domainEvents = null)
     {
         _dbContext = dbContext;
-        _notifications = notifications ?? NoOpNotificationService.Instance;
+        _domainEvents = domainEvents ?? NoOpDomainEventDispatcher.Instance;
     }
 
     public async Task<AuthResult<IReadOnlyList<PatientDoctorDirectoryItemDto>>> SearchDoctorsAsync(
@@ -69,7 +70,14 @@ public class PatientDoctorService : IPatientDoctorService
                 item.Doctor.Name.ToLower().Contains(normalizedSearch)
                 || (item.Profile != null && item.Profile.Specialty.ToLower().Contains(normalizedSearch))
                 || (item.Profile != null && item.Profile.ClinicAddress.ToLower().Contains(normalizedSearch))
-                || (item.Profile != null && item.Profile.MedicalLicenseNumber.ToLower().Contains(normalizedSearch)));
+                || (item.Profile != null && item.Profile.MedicalLicenseNumber.ToLower().Contains(normalizedSearch))
+                || _dbContext.ClinicDoctors.Any(membership =>
+                    membership.DoctorId == item.Doctor.Id
+                    && _dbContext.Clinics.Any(clinic =>
+                        clinic.ClinicId == membership.ClinicId
+                        && clinic.IsEnabled
+                        && (clinic.Name.ToLower().Contains(normalizedSearch)
+                            || clinic.Address.ToLower().Contains(normalizedSearch)))));
         }
 
         if (normalizedSpecialty is not null)
@@ -82,6 +90,33 @@ public class PatientDoctorService : IPatientDoctorService
             .OrderBy(item => item.Doctor.Name)
             .ToListAsync(cancellationToken);
 
+        var doctorIds = doctors.Select(item => item.Doctor.Id).ToList();
+        var clinicRows = await (
+            from membership in _dbContext.ClinicDoctors.AsNoTracking()
+            join clinic in _dbContext.Clinics.AsNoTracking()
+                on membership.ClinicId equals clinic.ClinicId
+            where doctorIds.Contains(membership.DoctorId) && clinic.IsEnabled
+            orderby clinic.Name
+            select new
+            {
+                membership.DoctorId,
+                clinic.ClinicId,
+                clinic.Name,
+                clinic.Address,
+            })
+            .ToListAsync(cancellationToken);
+
+        var clinicsByDoctorId = clinicRows
+            .GroupBy(item => item.DoctorId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PatientDoctorDirectoryClinicDto>)group
+                    .Select(item => new PatientDoctorDirectoryClinicDto(
+                        item.ClinicId,
+                        item.Name,
+                        item.Address))
+                    .ToList());
+
         var result = doctors
             .Select(item => new PatientDoctorDirectoryItemDto(
                 item.Doctor.Id,
@@ -90,7 +125,10 @@ public class PatientDoctorService : IPatientDoctorService
                 item.Profile?.MedicalLicenseNumber ?? string.Empty,
                 item.Profile?.ClinicAddress ?? string.Empty,
                 item.Doctor.PhoneNumber ?? string.Empty,
-                statusByDoctorId.TryGetValue(item.Doctor.Id, out var status) ? status : null))
+                statusByDoctorId.TryGetValue(item.Doctor.Id, out var status) ? status : null,
+                clinicsByDoctorId.TryGetValue(item.Doctor.Id, out var clinics)
+                    ? clinics
+                    : []))
             .ToList();
 
         return AuthResult<IReadOnlyList<PatientDoctorDirectoryItemDto>>.Success(result);
@@ -298,12 +336,14 @@ public class PatientDoctorService : IPatientDoctorService
             .FirstOrDefaultAsync(cancellationToken)
             ?? "Patient";
 
-        await _notifications.NotifyAsync(
-            doctorId,
-            NotificationType.PatientLinkRequested,
-            "New patient request",
-            $"{patientName} requested to link with you at {clinic.Name}.",
-            new { patientId, patientName, clinicId, clinicName = clinic.Name },
+        await _domainEvents.DispatchAsync(
+            new CareRelationshipRequestedEvent(
+                doctorId,
+                patientId,
+                clinicId,
+                patientName,
+                clinic.Name,
+                DateTime.UtcNow),
             cancellationToken);
 
         return AuthResult<PatientLinkedDoctorDto>.Success(new PatientLinkedDoctorDto(

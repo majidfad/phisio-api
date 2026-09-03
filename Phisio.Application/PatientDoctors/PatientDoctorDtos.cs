@@ -2,6 +2,11 @@ using Phisio.Domain.Enums;
 
 namespace Phisio.Application.PatientDoctors;
 
+public sealed record PatientDoctorDirectoryClinicDto(
+    Guid ClinicId,
+    string Name,
+    string Address);
+
 public sealed record PatientDoctorDirectoryItemDto(
     Guid DoctorId,
     string Name,
@@ -9,7 +14,8 @@ public sealed record PatientDoctorDirectoryItemDto(
     string MedicalLicenseNumber,
     string ClinicAddress,
     string PhoneNumber,
-    DoctorPatientStatus? RelationshipStatus);
+    DoctorPatientStatus? RelationshipStatus,
+    IReadOnlyList<PatientDoctorDirectoryClinicDto> Clinics);
 
 public sealed record PatientDoctorProfileDto(
     Guid DoctorId,

@@ -13,6 +13,7 @@ public interface IAssignmentService
     Task<AuthResult<IReadOnlyList<AssignmentDto>>> GetByPatientIdAsync(
         Guid doctorId,
         Guid patientId,
+        Guid clinicId,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<IReadOnlyList<AssignmentDto>>> GetMyAssignmentsAsync(

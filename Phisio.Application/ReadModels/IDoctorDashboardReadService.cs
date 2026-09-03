@@ -1,8 +1,9 @@
 using Phisio.Application.Common;
+using Phisio.Application.DoctorDashboard;
 
-namespace Phisio.Application.DoctorDashboard;
+namespace Phisio.Application.ReadModels;
 
-public interface IDoctorDashboardService
+public interface IDoctorDashboardReadService
 {
     Task<AuthResult<DoctorDashboardDto>> GetDashboardAsync(
         Guid doctorId,

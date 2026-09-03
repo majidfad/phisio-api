@@ -21,6 +21,7 @@ public sealed record UpdateExerciseProgramRequest(
 public sealed record ExerciseProgramDto(
     Guid ProgramId,
     Guid PatientId,
+    Guid ClinicId,
     DateOnly StartDate,
     DateOnly EndDate,
     ExerciseProgramCadenceType CadenceType,

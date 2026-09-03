@@ -1,24 +1,31 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
-using Phisio.Application.Notifications;
 using Phisio.Application.PatientDailyFeedback;
+using Phisio.Application.Relationships;
+using Phisio.Domain.Common;
 using Phisio.Domain.Entities;
-using Phisio.Domain.Enums;
+using Phisio.Domain.Events;
+using Phisio.Infrastructure.Events;
 using Phisio.Infrastructure.Persistence;
+using Phisio.Infrastructure.Services.Care;
 
 namespace Phisio.Infrastructure.Services;
 
 public class PatientDailyFeedbackService : IPatientDailyFeedbackService
 {
     private readonly AppDbContext _dbContext;
-    private readonly INotificationService _notifications;
+    private readonly ICareRelationshipService _careRelationships;
+    private readonly IDomainEventDispatcher _domainEvents;
 
     public PatientDailyFeedbackService(
         AppDbContext dbContext,
-        INotificationService? notifications = null)
+        ICareRelationshipService? careRelationships = null,
+        IDomainEventDispatcher? domainEvents = null)
     {
         _dbContext = dbContext;
-        _notifications = notifications ?? NoOpNotificationService.Instance;
+        _domainEvents = domainEvents ?? NoOpDomainEventDispatcher.Instance;
+        _careRelationships = careRelationships
+            ?? new CareRelationshipService(dbContext, _domainEvents);
     }
 
     public async Task<AuthResult<SubmitDailyFeedbackResponse>> SubmitAsync(
@@ -27,15 +34,23 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
         CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var doctorId = request.DoctorId
-            ?? await ResolveDoctorIdAsync(patientId, today, cancellationToken);
+        var careContext = await ResolveCareContextAsync(patientId, request, today, cancellationToken);
 
-        if (doctorId is null || doctorId == Guid.Empty)
+        if (careContext is null)
         {
             return AuthResult<SubmitDailyFeedbackResponse>.Failure([PatientDailyFeedbackErrors.DoctorNotFound]);
         }
 
-        if (!await HasActiveRelationshipAsync(patientId, doctorId.Value, cancellationToken))
+        var context = CareContext.From(
+            careContext.Value.DoctorId,
+            patientId,
+            careContext.Value.ClinicId);
+
+        if (!await _careRelationships.HasActiveRelationshipAsync(
+                context.DoctorId,
+                context.PatientId,
+                context.ClinicId,
+                cancellationToken))
         {
             return AuthResult<SubmitDailyFeedbackResponse>.Failure([PatientDailyFeedbackErrors.DoctorNotFound]);
         }
@@ -49,22 +64,25 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
             .FirstOrDefaultAsync(
                 feedback =>
                     feedback.PatientId == patientId
-                    && feedback.DoctorId == doctorId.Value
+                    && feedback.DoctorId == context.DoctorId
+                    && feedback.ClinicId == context.ClinicId
                     && feedback.FeedbackDate == today,
                 cancellationToken);
 
         if (existingFeedback is not null)
         {
-            existingFeedback.ImprovementScore = request.ImprovementScore;
-            existingFeedback.HardnessScore = request.HardnessScore;
-            existingFeedback.Comment = normalizedComment;
+            existingFeedback.UpdateScores(
+                request.ImprovementScore,
+                request.HardnessScore,
+                normalizedComment);
             existingFeedback.IsEnabled = true;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            await NotifyDoctorOfFeedbackAsync(
+            await DispatchFeedbackSubmittedAsync(
                 patientId,
-                doctorId.Value,
+                context.DoctorId,
+                context.ClinicId,
                 wasUpdated: true,
                 cancellationToken);
 
@@ -73,6 +91,7 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                     existingFeedback.DailyPatientFeedbackId,
                     existingFeedback.PatientId,
                     existingFeedback.DoctorId,
+                    existingFeedback.ClinicId,
                     existingFeedback.FeedbackDate,
                     existingFeedback.ImprovementScore,
                     existingFeedback.HardnessScore,
@@ -80,24 +99,20 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                     WasUpdated: true));
         }
 
-        var feedback = new DailyPatientFeedback
-        {
-            DailyPatientFeedbackId = Guid.NewGuid(),
-            PatientId = patientId,
-            DoctorId = doctorId.Value,
-            FeedbackDate = today,
-            ImprovementScore = request.ImprovementScore,
-            HardnessScore = request.HardnessScore,
-            Comment = normalizedComment,
-            IsEnabled = true,
-        };
+        var feedback = DailyPatientFeedback.Submit(
+            context,
+            today,
+            request.ImprovementScore,
+            request.HardnessScore,
+            normalizedComment);
 
         _dbContext.DailyPatientFeedbacks.Add(feedback);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        await NotifyDoctorOfFeedbackAsync(
+        await DispatchFeedbackSubmittedAsync(
             patientId,
-            doctorId.Value,
+            context.DoctorId,
+            context.ClinicId,
             wasUpdated: false,
             cancellationToken);
 
@@ -106,6 +121,7 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                 feedback.DailyPatientFeedbackId,
                 feedback.PatientId,
                 feedback.DoctorId,
+                feedback.ClinicId,
                 feedback.FeedbackDate,
                 feedback.ImprovementScore,
                 feedback.HardnessScore,
@@ -113,69 +129,81 @@ public class PatientDailyFeedbackService : IPatientDailyFeedbackService
                 WasUpdated: false));
     }
 
-    private async Task NotifyDoctorOfFeedbackAsync(
+    private async Task DispatchFeedbackSubmittedAsync(
         Guid patientId,
         Guid doctorId,
+        Guid clinicId,
         bool wasUpdated,
         CancellationToken cancellationToken)
     {
-        var patientName = await _dbContext.Users
-            .AsNoTracking()
-            .Where(u => u.Id == patientId)
-            .Select(u => u.Name)
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? "Patient";
-
-        await _notifications.NotifyAsync(
-            doctorId,
-            NotificationType.DailyFeedbackReceived,
-            wasUpdated ? "Daily feedback updated" : "New daily feedback",
-            wasUpdated
-                ? $"{patientName} updated today's feedback."
-                : $"{patientName} submitted today's feedback.",
-            new { patientId, patientName },
+        var patientName = await CareExerciseCatalog.GetUserNameAsync(_dbContext, patientId, cancellationToken);
+        await _domainEvents.DispatchAsync(
+            new DailyFeedbackSubmittedEvent(
+                doctorId,
+                patientId,
+                clinicId,
+                patientName,
+                wasUpdated,
+                DateTime.UtcNow),
             cancellationToken);
     }
 
-    private async Task<Guid?> ResolveDoctorIdAsync(
+    private async Task<(Guid DoctorId, Guid ClinicId)?> ResolveCareContextAsync(
         Guid patientId,
+        SubmitDailyFeedbackRequest request,
         DateOnly feedbackDate,
         CancellationToken cancellationToken)
     {
-        var doctorIdFromCompletion = await _dbContext.ExerciseCompletions
-            .AsNoTracking()
-            .Where(completion =>
-                completion.PatientId == patientId
-                && completion.CompletionDate == feedbackDate
-                && completion.IsEnabled)
-            .OrderByDescending(completion => completion.CreatedAt)
-            .Select(completion => completion.DoctorId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (doctorIdFromCompletion != Guid.Empty)
+        if (request.DoctorId is { } requestedDoctorId && requestedDoctorId != Guid.Empty)
         {
-            return doctorIdFromCompletion;
+            if (request.ClinicId is { } requestedClinicId && requestedClinicId != Guid.Empty)
+            {
+                return (requestedDoctorId, requestedClinicId);
+            }
+
+            var clinicIds = await _dbContext.DoctorPatients
+                .AsNoTracking()
+                .WhereActive()
+                .Where(relationship =>
+                    relationship.PatientId == patientId && relationship.DoctorId == requestedDoctorId)
+                .Select(relationship => relationship.ClinicId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            if (clinicIds.Count == 1)
+            {
+                return (requestedDoctorId, clinicIds[0]);
+            }
+
+            return null;
         }
 
-        var doctorIdFromRelationship = await _dbContext.DoctorPatients
+        var fromCompletion = await (
+            from completion in _dbContext.ExerciseCompletions.AsNoTracking()
+            join assignment in _dbContext.UserExercises.AsNoTracking()
+                on completion.UserExerciseId equals assignment.UserExerciseId
+            where completion.PatientId == patientId
+                && completion.CompletionDate == feedbackDate
+                && completion.IsEnabled
+            orderby completion.CreatedAt descending
+            select new { completion.DoctorId, assignment.ClinicId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (fromCompletion is not null)
+        {
+            return (fromCompletion.DoctorId, fromCompletion.ClinicId);
+        }
+
+        var fromRelationship = await _dbContext.DoctorPatients
             .AsNoTracking()
             .WhereActive()
             .Where(relationship => relationship.PatientId == patientId)
             .OrderByDescending(relationship => relationship.CreatedAt)
-            .Select(relationship => relationship.DoctorId)
+            .Select(relationship => new { relationship.DoctorId, relationship.ClinicId })
             .FirstOrDefaultAsync(cancellationToken);
 
-        return doctorIdFromRelationship == Guid.Empty ? null : doctorIdFromRelationship;
+        return fromRelationship is null
+            ? null
+            : (fromRelationship.DoctorId, fromRelationship.ClinicId);
     }
-
-    private Task<bool> HasActiveRelationshipAsync(
-        Guid patientId,
-        Guid doctorId,
-        CancellationToken cancellationToken) =>
-        _dbContext.DoctorPatients
-            .AsNoTracking()
-            .WhereActive()
-            .AnyAsync(
-                relationship => relationship.PatientId == patientId && relationship.DoctorId == doctorId,
-                cancellationToken);
 }

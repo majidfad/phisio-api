@@ -1,57 +1,70 @@
 using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
-using Phisio.Application.Notifications;
 using Phisio.Application.PatientExercises;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
+using Phisio.Domain.Events;
+using Phisio.Infrastructure.Events;
 using Phisio.Infrastructure.Persistence;
+using Phisio.Infrastructure.Services.Care;
 
 namespace Phisio.Infrastructure.Services;
 
 public class PatientExerciseService : IPatientExerciseService
 {
     private readonly AppDbContext _dbContext;
-    private readonly INotificationService _notifications;
+    private readonly IDomainEventDispatcher _domainEvents;
 
     public PatientExerciseService(
         AppDbContext dbContext,
-        INotificationService? notifications = null)
+        IDomainEventDispatcher? domainEvents = null)
     {
         _dbContext = dbContext;
-        _notifications = notifications ?? NoOpNotificationService.Instance;
+        _domainEvents = domainEvents ?? NoOpDomainEventDispatcher.Instance;
     }
 
     public async Task<AuthResult<PatientExercisesResponse>> GetExercisesAsync(
         Guid patientId,
         DateOnly? scheduledDate = null,
         Guid? doctorId = null,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var doctorName = await (
-            from dp in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
-            join doctor in _dbContext.Users.AsNoTracking() on dp.DoctorId equals doctor.Id
-            where dp.PatientId == patientId
-                && (doctorId == null || dp.DoctorId == doctorId)
-            orderby dp.CreatedAt descending
+            from ue in _dbContext.UserExercises.AsNoTracking()
+            join doctor in _dbContext.Users.AsNoTracking() on ue.DoctorId equals doctor.Id
+            join relationship in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
+                on new { ue.DoctorId, ue.PatientId, ue.ClinicId }
+                equals new { relationship.DoctorId, relationship.PatientId, relationship.ClinicId }
+            where ue.PatientId == patientId
+                && ue.IsActive
+                && ue.IsEnabled
+                && (doctorId == null || ue.DoctorId == doctorId)
+                && (clinicId == null || ue.ClinicId == clinicId)
+            orderby ue.AssignedAt descending
             select doctor.Name)
             .FirstOrDefaultAsync(cancellationToken);
 
         var exercises = await (
-            from dp in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
-            join ue in _dbContext.UserExercises.AsNoTracking()
-                on new { dp.DoctorId, dp.PatientId } equals new { DoctorId = ue.DoctorId, PatientId = ue.PatientId }
+            from ue in _dbContext.UserExercises.AsNoTracking()
             join exercise in _dbContext.Exercises.AsNoTracking() on ue.ExerciseId equals exercise.ExerciseId
+            join clinic in _dbContext.Clinics.AsNoTracking() on ue.ClinicId equals clinic.ClinicId
+            join relationship in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
+                on new { ue.DoctorId, ue.PatientId, ue.ClinicId }
+                equals new { relationship.DoctorId, relationship.PatientId, relationship.ClinicId }
             join completion in _dbContext.ExerciseCompletions.AsNoTracking()
                 on new { ue.UserExerciseId, CompletionDate = today } equals new { completion.UserExerciseId, completion.CompletionDate }
                 into completions
             from completion in completions.DefaultIfEmpty()
-            where dp.PatientId == patientId
-                && (doctorId == null || dp.DoctorId == doctorId)
+            where ue.PatientId == patientId
+                && (doctorId == null || ue.DoctorId == doctorId)
+                && (clinicId == null || ue.ClinicId == clinicId)
                 && ue.IsActive
                 && ue.IsEnabled
                 && exercise.IsEnabled
+                && clinic.IsEnabled
                 && (scheduledDate == null || ue.ScheduledDate == scheduledDate)
             orderby ue.ScheduledDate descending, ue.AssignedAt descending
             select new PatientExerciseItemDto(
@@ -66,22 +79,10 @@ public class PatientExerciseService : IPatientExerciseService
                 completion != null,
                 ue.Sets,
                 ue.Reps,
-                ue.PatientCue))
+                ue.PatientCue,
+                clinic.ClinicId,
+                clinic.Name))
             .ToListAsync(cancellationToken);
-
-        if (doctorName is null && exercises.Count > 0)
-        {
-            doctorName = await (
-                from ue in _dbContext.UserExercises.AsNoTracking()
-                join doctor in _dbContext.Users.AsNoTracking() on ue.DoctorId equals doctor.Id
-                where ue.PatientId == patientId
-                    && (doctorId == null || ue.DoctorId == doctorId)
-                    && ue.IsActive
-                    && ue.IsEnabled
-                orderby ue.AssignedAt descending
-                select doctor.Name)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
 
         return AuthResult<PatientExercisesResponse>.Success(
             new PatientExercisesResponse(doctorName, exercises));
@@ -90,31 +91,38 @@ public class PatientExerciseService : IPatientExerciseService
     public async Task<AuthResult<PatientTodayExercisesResponse>> GetTodayExercisesAsync(
         Guid patientId,
         Guid? doctorId = null,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var exerciseRows = await (
-            from dp in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
-            join ue in _dbContext.UserExercises.AsNoTracking()
-                on new { dp.DoctorId, dp.PatientId } equals new { DoctorId = ue.DoctorId, PatientId = ue.PatientId }
+            from ue in _dbContext.UserExercises.AsNoTracking()
             join exercise in _dbContext.Exercises.AsNoTracking() on ue.ExerciseId equals exercise.ExerciseId
             join doctor in _dbContext.Users.AsNoTracking() on ue.DoctorId equals doctor.Id
+            join clinic in _dbContext.Clinics.AsNoTracking() on ue.ClinicId equals clinic.ClinicId
+            join relationship in _dbContext.DoctorPatients.AsNoTracking().WhereActive()
+                on new { ue.DoctorId, ue.PatientId, ue.ClinicId }
+                equals new { relationship.DoctorId, relationship.PatientId, relationship.ClinicId }
             join completion in _dbContext.ExerciseCompletions.AsNoTracking()
                 on new { ue.UserExerciseId, CompletionDate = today } equals new { completion.UserExerciseId, completion.CompletionDate }
                 into completions
             from completion in completions.DefaultIfEmpty()
-            where dp.PatientId == patientId
-                && (doctorId == null || dp.DoctorId == doctorId)
+            where ue.PatientId == patientId
+                && (doctorId == null || ue.DoctorId == doctorId)
+                && (clinicId == null || ue.ClinicId == clinicId)
                 && ue.IsActive
                 && ue.IsEnabled
                 && exercise.IsEnabled
+                && clinic.IsEnabled
                 && ue.ScheduledDate == today
-            orderby doctor.Name, exercise.Title
+            orderby doctor.Name, clinic.Name, exercise.Title
             select new
             {
                 DoctorId = doctor.Id,
                 DoctorName = doctor.Name,
+                ClinicId = clinic.ClinicId,
+                ClinicName = clinic.Name,
                 Item = new PatientTodayExerciseItemDto(
                     ue.UserExerciseId,
                     exercise.ExerciseId,
@@ -126,16 +134,21 @@ public class PatientExerciseService : IPatientExerciseService
                     completion != null,
                     ue.Sets,
                     ue.Reps,
-                    ue.PatientCue),
+                    ue.PatientCue,
+                    clinic.ClinicId,
+                    clinic.Name),
             })
             .ToListAsync(cancellationToken);
 
         var doctorGroups = exerciseRows
-            .GroupBy(row => new { row.DoctorId, row.DoctorName })
+            .GroupBy(row => new { row.DoctorId, row.DoctorName, row.ClinicId, row.ClinicName })
             .OrderBy(group => group.Key.DoctorName)
+            .ThenBy(group => group.Key.ClinicName)
             .Select(group => new PatientDoctorExerciseGroupDto(
                 group.Key.DoctorId,
                 group.Key.DoctorName,
+                group.Key.ClinicId,
+                group.Key.ClinicName,
                 group.Select(row => row.Item).ToList()))
             .ToList();
 
@@ -169,13 +182,22 @@ public class PatientExerciseService : IPatientExerciseService
             return AuthResult<CompleteExercisesResponse>.Failure([PatientExerciseErrors.AssignmentNotFound]);
         }
 
-        var activeDoctorIds = await _dbContext.DoctorPatients
+        var careKeys = assignments
+            .Select(assignment => (assignment.DoctorId, assignment.ClinicId))
+            .Distinct()
+            .ToList();
+
+        var activeRelationships = await _dbContext.DoctorPatients
             .WhereActive()
             .Where(dp => dp.PatientId == patientId)
-            .Select(dp => dp.DoctorId)
+            .Select(dp => new { dp.DoctorId, dp.ClinicId })
             .ToListAsync(cancellationToken);
 
-        if (assignments.Any(assignment => !activeDoctorIds.Contains(assignment.DoctorId)))
+        var activeKeys = activeRelationships
+            .Select(relationship => (relationship.DoctorId, relationship.ClinicId))
+            .ToHashSet();
+
+        if (careKeys.Any(key => !activeKeys.Contains(key)))
         {
             return AuthResult<CompleteExercisesResponse>.Failure([PatientExerciseErrors.AssignmentNotFound]);
         }
@@ -220,12 +242,7 @@ public class PatientExerciseService : IPatientExerciseService
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            var patientName = await _dbContext.Users
-                .AsNoTracking()
-                .Where(u => u.Id == patientId)
-                .Select(u => u.Name)
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? "Patient";
+            var patientName = await CareExerciseCatalog.GetUserNameAsync(_dbContext, patientId, cancellationToken);
 
             var byDoctor = assignments
                 .Where(a => createdIds.Contains(a.UserExerciseId))
@@ -234,14 +251,13 @@ public class PatientExerciseService : IPatientExerciseService
 
             foreach (var group in byDoctor)
             {
-                await _notifications.NotifyAsync(
-                    group.DoctorId,
-                    NotificationType.ExercisesCompleted,
-                    "Exercises completed",
-                    group.Count == 1
-                        ? $"{patientName} completed 1 exercise."
-                        : $"{patientName} completed {group.Count} exercises.",
-                    new { patientId, patientName, count = group.Count },
+                await _domainEvents.DispatchAsync(
+                    new ExercisesCompletedEvent(
+                        group.DoctorId,
+                        patientId,
+                        patientName,
+                        group.Count,
+                        DateTime.UtcNow),
                     cancellationToken);
             }
         }

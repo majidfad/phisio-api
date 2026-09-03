@@ -1,46 +1,24 @@
-using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.DoctorDashboard;
-using Phisio.Domain.Enums;
-using Phisio.Infrastructure.Persistence;
+using Phisio.Application.ReadModels;
 
 namespace Phisio.Infrastructure.Services;
 
+/// <summary>
+/// Facade for dashboard queries. Delegates to the read model service.
+/// </summary>
 public class DoctorDashboardService : IDoctorDashboardService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IDoctorDashboardReadService _readModel;
 
-    public DoctorDashboardService(AppDbContext dbContext)
+    public DoctorDashboardService(IDoctorDashboardReadService readModel)
     {
-        _dbContext = dbContext;
+        _readModel = readModel;
     }
 
-    public async Task<AuthResult<DoctorDashboardDto>> GetDashboardAsync(
+    public Task<AuthResult<DoctorDashboardDto>> GetDashboardAsync(
         Guid doctorId,
-        CancellationToken cancellationToken = default)
-    {
-        var patientsCount = await _dbContext.DoctorPatients
-            .AsNoTracking()
-            .WhereActive()
-            .CountAsync(dp => dp.DoctorId == doctorId, cancellationToken);
-
-        var recentPatients = await _dbContext.DoctorPatients
-            .AsNoTracking()
-            .WhereActive()
-            .Where(dp => dp.DoctorId == doctorId)
-            .OrderByDescending(dp => dp.CreatedAt)
-            .Take(5)
-            .Join(
-                _dbContext.Users.AsNoTracking().Where(u => u.Role == UserRole.Patient),
-                dp => dp.PatientId,
-                u => u.Id,
-                (dp, u) => new DoctorDashboardRecentPatientDto(
-                    u.Id,
-                    u.Name,
-                    u.PhoneNumber ?? string.Empty))
-            .ToListAsync(cancellationToken);
-
-        return AuthResult<DoctorDashboardDto>.Success(
-            new DoctorDashboardDto(patientsCount, recentPatients));
-    }
+        Guid? clinicId = null,
+        CancellationToken cancellationToken = default) =>
+        _readModel.GetDashboardAsync(doctorId, clinicId, cancellationToken);
 }

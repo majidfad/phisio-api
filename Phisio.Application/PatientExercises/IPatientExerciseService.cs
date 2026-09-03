@@ -8,11 +8,13 @@ public interface IPatientExerciseService
         Guid patientId,
         DateOnly? scheduledDate = null,
         Guid? doctorId = null,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<PatientTodayExercisesResponse>> GetTodayExercisesAsync(
         Guid patientId,
         Guid? doctorId = null,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default);
 
     Task<AuthResult<CompleteExercisesResponse>> CompleteExercisesAsync(
