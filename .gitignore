@@ -3,6 +3,8 @@
 **/.vs/
 *.user
 *.suo
+*.nupkg
+.local-nuget-feed/
 deploy/.env
 .env
 .env.local
