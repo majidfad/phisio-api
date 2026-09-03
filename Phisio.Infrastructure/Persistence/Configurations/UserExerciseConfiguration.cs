@@ -22,6 +22,9 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
         builder.Property(ue => ue.PatientId)
             .IsRequired();
 
+        builder.Property(ue => ue.ClinicId)
+            .IsRequired();
+
         builder.Property(ue => ue.ExerciseId)
             .IsRequired();
 
@@ -63,10 +66,12 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
 
         builder.HasIndex(ue => new { ue.PatientId, ue.IsActive });
 
-        builder.HasIndex(ue => new { ue.PatientId, ue.DoctorId, ue.ExerciseId, ue.ScheduledDate })
+        builder.HasIndex(ue => ue.ClinicId);
+
+        builder.HasIndex(ue => new { ue.PatientId, ue.DoctorId, ue.ClinicId, ue.ExerciseId, ue.ScheduledDate })
             .IsUnique()
             .HasFilter("\"IsActive\" = true AND \"IsEnabled\" = true")
-            .HasDatabaseName("ix_user_exercises_patient_doctor_exercise_scheduled_active");
+            .HasDatabaseName("ix_user_exercises_patient_doctor_clinic_exercise_scheduled_active");
 
         builder.HasOne<ApplicationUser>()
             .WithMany(u => u.UserExercises)
@@ -76,6 +81,11 @@ public class UserExerciseConfiguration : IEntityTypeConfiguration<UserExercise>
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(ue => ue.DoctorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Clinic>()
+            .WithMany()
+            .HasForeignKey(ue => ue.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(ue => ue.Exercise)

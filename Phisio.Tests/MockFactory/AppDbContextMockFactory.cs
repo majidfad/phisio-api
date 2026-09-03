@@ -49,6 +49,7 @@ internal static class AppDbContextMockFactory
 
         if (userExercises is not null)
         {
+            EnsureClinicsForAssignments(context, userExercises);
             context.UserExercises.AddRange(userExercises);
             context.SaveChanges();
         }
@@ -92,11 +93,46 @@ internal static class AppDbContextMockFactory
 
         if (exercisePrograms is not null)
         {
+            EnsureClinicsForPrograms(context, exercisePrograms);
             context.ExercisePrograms.AddRange(exercisePrograms);
             context.SaveChanges();
         }
 
         return mock;
+    }
+
+    private static void EnsureClinicsForAssignments(
+        AppDbContext context,
+        IEnumerable<UserExercise> assignments)
+    {
+        EnsureClinicsExist(context, assignments.Select(assignment => assignment.ClinicId));
+    }
+
+    private static void EnsureClinicsForPrograms(
+        AppDbContext context,
+        IEnumerable<ExerciseProgram> programs)
+    {
+        EnsureClinicsExist(context, programs.Select(program => program.ClinicId));
+    }
+
+    private static void EnsureClinicsExist(AppDbContext context, IEnumerable<Guid> clinicIds)
+    {
+        var existingClinicIds = context.Clinics.Select(clinic => clinic.ClinicId).ToHashSet();
+        foreach (var clinicId in clinicIds.Distinct())
+        {
+            if (clinicId == Guid.Empty || existingClinicIds.Contains(clinicId))
+            {
+                continue;
+            }
+
+            context.Clinics.Add(ClinicBuilder.Create(clinicId));
+            existingClinicIds.Add(clinicId);
+        }
+
+        if (context.ChangeTracker.HasChanges())
+        {
+            context.SaveChanges();
+        }
     }
 
     private static void EnsureClinicMembershipsForDoctorPatients(

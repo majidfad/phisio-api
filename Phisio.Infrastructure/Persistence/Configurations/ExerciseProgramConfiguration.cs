@@ -17,6 +17,7 @@ public class ExerciseProgramConfiguration : IEntityTypeConfiguration<ExercisePro
         builder.Property(p => p.ProgramId).ValueGeneratedNever();
         builder.Property(p => p.DoctorId).IsRequired();
         builder.Property(p => p.PatientId).IsRequired();
+        builder.Property(p => p.ClinicId).IsRequired();
         builder.Property(p => p.StartDate).IsRequired().HasColumnType("date");
         builder.Property(p => p.EndDate).IsRequired().HasColumnType("date");
         builder.Property(p => p.CadenceType)
@@ -29,7 +30,8 @@ public class ExerciseProgramConfiguration : IEntityTypeConfiguration<ExercisePro
         builder.ConfigureCreatedAt();
         builder.ConfigureSoftDelete();
 
-        builder.HasIndex(p => new { p.DoctorId, p.PatientId });
+        builder.HasIndex(p => new { p.DoctorId, p.PatientId, p.ClinicId });
+        builder.HasIndex(p => p.ClinicId);
 
         builder.HasOne<ApplicationUser>()
             .WithMany()
@@ -39,6 +41,11 @@ public class ExerciseProgramConfiguration : IEntityTypeConfiguration<ExercisePro
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(p => p.PatientId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Clinic>()
+            .WithMany()
+            .HasForeignKey(p => p.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

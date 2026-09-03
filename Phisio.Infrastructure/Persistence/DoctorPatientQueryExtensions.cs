@@ -11,4 +11,9 @@ public static class DoctorPatientQueryExtensions
 
     public static IQueryable<DoctorPatient> WherePending(this IQueryable<DoctorPatient> query) =>
         query.Where(dp => dp.IsEnabled && dp.Status == DoctorPatientStatus.Pending);
+
+    public static IQueryable<DoctorPatient> WhereClinic(
+        this IQueryable<DoctorPatient> query,
+        Guid? clinicId) =>
+        clinicId is null ? query : query.Where(dp => dp.ClinicId == clinicId.Value);
 }

@@ -22,6 +22,9 @@ public class DailyPatientFeedbackConfiguration : IEntityTypeConfiguration<DailyP
         builder.Property(f => f.DoctorId)
             .IsRequired();
 
+        builder.Property(f => f.ClinicId)
+            .IsRequired();
+
         builder.Property(f => f.FeedbackDate)
             .IsRequired()
             .HasColumnType("date");
@@ -39,11 +42,12 @@ public class DailyPatientFeedbackConfiguration : IEntityTypeConfiguration<DailyP
         builder.ConfigureCreatedAt();
         builder.ConfigureSoftDelete();
 
-        builder.HasIndex(f => new { f.PatientId, f.DoctorId, f.FeedbackDate })
+        builder.HasIndex(f => new { f.PatientId, f.DoctorId, f.ClinicId, f.FeedbackDate })
             .IsUnique()
-            .HasDatabaseName("ix_daily_patient_feedbacks_patient_doctor_feedback_date");
+            .HasDatabaseName("ix_daily_patient_feedbacks_patient_doctor_clinic_feedback_date");
 
         builder.HasIndex(f => f.DoctorId);
+        builder.HasIndex(f => f.ClinicId);
         builder.HasIndex(f => f.FeedbackDate);
 
         builder.HasOne<ApplicationUser>()
@@ -54,6 +58,11 @@ public class DailyPatientFeedbackConfiguration : IEntityTypeConfiguration<DailyP
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(f => f.DoctorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Clinic>()
+            .WithMany()
+            .HasForeignKey(f => f.ClinicId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
