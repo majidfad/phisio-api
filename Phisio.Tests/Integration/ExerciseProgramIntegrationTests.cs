@@ -410,6 +410,7 @@ public sealed class ExerciseProgramIntegrationTests
         var deleteResult = await controller.DeletePatientProgram(
             scenario.Patient.Id,
             programId,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         deleteResult.Should().BeOfType<NoContentResult>();
@@ -445,6 +446,7 @@ public sealed class ExerciseProgramIntegrationTests
         var result = await controller.DeletePatientProgram(
             scenario.Patient.Id,
             Guid.NewGuid(),
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         result.Should().BeOfType<NotFoundObjectResult>();
@@ -474,7 +476,7 @@ public sealed class ExerciseProgramIntegrationTests
                 today.AddDays(1),
                 ExerciseManagementTestHelpers.ProgramItem(scenario.DoctorExercise2.ExerciseId)));
 
-        var result = await controller.GetPatientPrograms(scenario.Patient.Id, CancellationToken.None);
+        var result = await controller.GetPatientPrograms(scenario.Patient.Id, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None);
 
         var programs = result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeAssignableTo<IReadOnlyList<ExerciseProgramDto>>().Subject;
@@ -489,7 +491,7 @@ public sealed class ExerciseProgramIntegrationTests
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host);
         var controller = host.CreateDoctorPatientsController(scenario.Doctor.Id);
 
-        var result = await controller.GetPatientPrograms(scenario.OtherPatient.Id, CancellationToken.None);
+        var result = await controller.GetPatientPrograms(scenario.OtherPatient.Id, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None);
 
         result.Should().BeOfType<NotFoundObjectResult>();
     }
@@ -516,7 +518,7 @@ public sealed class ExerciseProgramIntegrationTests
                     clinicianNote: "Note",
                     patientCue: "Cue")));
 
-        var result = await controller.GetPatientPrograms(scenario.Patient.Id, CancellationToken.None);
+        var result = await controller.GetPatientPrograms(scenario.Patient.Id, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None);
         var programs = result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeAssignableTo<IReadOnlyList<ExerciseProgramDto>>().Subject;
         var program = programs.Should().ContainSingle().Subject;
@@ -554,7 +556,7 @@ public sealed class ExerciseProgramIntegrationTests
                 ExerciseManagementTestHelpers.ProgramItem(scenario.DoctorExercise.ExerciseId),
                 ExerciseManagementTestHelpers.ProgramItem(scenario.DoctorExercise2.ExerciseId)));
 
-        var result = await controller.GetPatientOverview(scenario.Patient.Id, CancellationToken.None);
+        var result = await controller.GetPatientOverview(scenario.Patient.Id, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None);
         var overview = result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<DoctorPatientOverviewDto>().Subject;
 
@@ -591,9 +593,10 @@ public sealed class ExerciseProgramIntegrationTests
 
         var result = await controller.GetPatientExerciseStats(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             from: today,
             to: today,
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -619,7 +622,7 @@ public sealed class ExerciseProgramIntegrationTests
 
         var otherController = host.CreateDoctorPatientsController(scenario.OtherDoctor.Id);
 
-        (await otherController.GetPatientPrograms(scenario.Patient.Id, CancellationToken.None))
+        (await otherController.GetPatientPrograms(scenario.Patient.Id, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None))
             .Should().BeOfType<NotFoundObjectResult>();
 
         (await ExerciseManagementTestHelpers.UpdateProgramWithValidationAsync(
@@ -637,6 +640,7 @@ public sealed class ExerciseProgramIntegrationTests
         (await otherController.DeletePatientProgram(
                 scenario.Patient.Id,
                 programId,
+                DoctorPatientBuilder.DefaultClinicId,
                 CancellationToken.None))
             .Should().BeOfType<NotFoundObjectResult>();
 
@@ -699,7 +703,8 @@ public sealed class ExerciseProgramIntegrationTests
         var patientResult = await patientController.GetExercises(
             scheduledDate: today,
             doctorId: null,
-            CancellationToken.None);
+            clinicId: null,
+            cancellationToken: CancellationToken.None);
 
         patientResult.Should().BeOfType<OkObjectResult>();
         host.DbContext.ChangeTracker.Clear();
@@ -763,6 +768,7 @@ public sealed class ExerciseProgramIntegrationTests
         var result = await controller.CreatePatientProgram(
             Guid.NewGuid(),
             request,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         result.Should().BeOfType<UnauthorizedResult>();
@@ -973,6 +979,7 @@ public sealed class ExerciseProgramIntegrationTests
         var act = async () => await controller.DeletePatientProgram(
             scenario.Patient.Id,
             programId,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()

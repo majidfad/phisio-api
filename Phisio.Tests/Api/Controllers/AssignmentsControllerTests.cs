@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Phisio.Application.Assignments;
+using Phisio.Tests.TestDataBuilder;
 using Phisio.Application.Common;
 
 namespace Phisio.Tests.Api.Controllers;
@@ -24,6 +25,7 @@ public class AssignmentsControllerCreateAssignmentTests
             Guid.Parse("c3d4e5f6-a7b8-9012-cdef-123456789012"),
             doctorId,
             request.PatientId,
+            DoctorPatientBuilder.DefaultClinicId,
             request.ExerciseId,
             "Hamstring Stretch",
             new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
@@ -109,6 +111,7 @@ public class AssignmentsControllerGetPatientAssignmentsTests
                 Guid.Parse("c3d4e5f6-a7b8-9012-cdef-123456789012"),
                 doctorId,
                 patientId,
+                DoctorPatientBuilder.DefaultClinicId,
                 Guid.Parse("b2c3d4e5-f6a7-8901-bcde-f12345678901"),
                 "Hamstring Stretch",
                 new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
@@ -116,7 +119,7 @@ public class AssignmentsControllerGetPatientAssignmentsTests
         };
 
         var assignmentService = new Mock<IAssignmentService>();
-        assignmentService.Setup(service => service.GetByPatientIdAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        assignmentService.Setup(service => service.GetByPatientIdAsync(doctorId, patientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<IReadOnlyList<AssignmentDto>>.Success(assignments));
 
         var controller = AssignmentsControllerTestHelper.CreateController(
@@ -124,7 +127,7 @@ public class AssignmentsControllerGetPatientAssignmentsTests
             AssignmentsControllerTestHelper.CreateAuthenticatedUser(doctorId));
 
         // Act
-        var result = await controller.GetPatientAssignments(patientId, CancellationToken.None);
+        var result = await controller.GetPatientAssignments(patientId, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None);
 
         // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -140,7 +143,7 @@ public class AssignmentsControllerGetPatientAssignmentsTests
         var patientId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
 
         var assignmentService = new Mock<IAssignmentService>();
-        assignmentService.Setup(service => service.GetByPatientIdAsync(doctorId, patientId, It.IsAny<CancellationToken>()))
+        assignmentService.Setup(service => service.GetByPatientIdAsync(doctorId, patientId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<IReadOnlyList<AssignmentDto>>.Failure(
                 ["Patient not found or is not linked to this doctor via assignments."]));
 
@@ -149,7 +152,7 @@ public class AssignmentsControllerGetPatientAssignmentsTests
             AssignmentsControllerTestHelper.CreateAuthenticatedUser(doctorId));
 
         // Act
-        var result = await controller.GetPatientAssignments(patientId, CancellationToken.None);
+        var result = await controller.GetPatientAssignments(patientId, DoctorPatientBuilder.DefaultClinicId, CancellationToken.None);
 
         // Assert
         var notFoundResult = result.Should().BeOfType<NotFoundObjectResult>().Subject;
@@ -166,6 +169,7 @@ public class AssignmentsControllerGetPatientAssignmentsTests
         // Act
         var result = await controller.GetPatientAssignments(
             Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         // Assert
@@ -187,6 +191,7 @@ public class AssignmentsControllerGetMyAssignmentsTests
                 Guid.Parse("c3d4e5f6-a7b8-9012-cdef-123456789012"),
                 Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
                 patientId,
+                DoctorPatientBuilder.DefaultClinicId,
                 Guid.Parse("b2c3d4e5-f6a7-8901-bcde-f12345678901"),
                 "Hamstring Stretch",
                 new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
@@ -270,8 +275,7 @@ public class AssignmentsControllerDeactivateAssignmentTests
         var result = await controller.DeactivateAssignment(assignmentId, CancellationToken.None);
 
         // Assert
-        var notFoundResult = result.Should().BeOfType<ObjectResult>().Subject;
-        notFoundResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        result.Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
@@ -293,8 +297,7 @@ public class AssignmentsControllerDeactivateAssignmentTests
         var result = await controller.DeactivateAssignment(assignmentId, CancellationToken.None);
 
         // Assert
-        var badRequestResult = result.Should().BeOfType<ObjectResult>().Subject;
-        badRequestResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]

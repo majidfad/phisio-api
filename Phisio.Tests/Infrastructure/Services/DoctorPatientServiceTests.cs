@@ -15,7 +15,7 @@ public class DoctorPatientServiceGetPatientsTests
     {
         var doctor = ApplicationUserBuilder.Doctor();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor]);
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.GetPatientsAsync(doctor.Id);
 
@@ -47,7 +47,7 @@ public class DoctorPatientServiceGetPatientsTests
             users: [doctor, activePatient, inactivePatient, pendingPatient],
             doctorPatients: doctorPatients);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.GetPatientsAsync(doctor.Id);
 
@@ -83,7 +83,7 @@ public class DoctorPatientServiceGetPatientsTests
                 DoctorPatientBuilder.Create(doctor.Id, patient.Id, secondClinic.ClinicId),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.GetPatientsAsync(doctor.Id);
 
@@ -117,7 +117,7 @@ public class DoctorPatientServiceRequestLifecycleTests
                 DoctorPatientBuilder.Create(doctor.Id, approvedPatient.Id),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.GetPendingRequestsAsync(doctor.Id);
 
@@ -143,7 +143,7 @@ public class DoctorPatientServiceRequestLifecycleTests
             users: [doctor, patient],
             doctorPatients: [existing]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.ApproveRequestAsync(
             doctor.Id,
@@ -181,7 +181,7 @@ public class DoctorPatientServiceRequestLifecycleTests
                     status: DoctorPatientStatus.Pending),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.ApproveRequestAsync(doctor.Id, patient.Id, secondClinic.ClinicId);
 
@@ -204,7 +204,7 @@ public class DoctorPatientServiceRequestLifecycleTests
             users: [doctor, patient],
             doctorPatients: [existing]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.RejectRequestAsync(
             doctor.Id,
@@ -230,7 +230,7 @@ public class DoctorPatientServiceRemoveTests
             users: [doctor, patient],
             doctorPatients: [existing]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.RemoveAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
@@ -245,7 +245,7 @@ public class DoctorPatientServiceRemoveTests
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor, patient]);
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.RemoveAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
@@ -265,7 +265,7 @@ public class DoctorPatientServiceRemoveTests
             users: [doctor, patient],
             doctorPatients: [existing]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.RemoveAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
@@ -295,7 +295,7 @@ public class DoctorPatientServiceRemoveTests
                 DoctorPatientBuilder.Create(doctor.Id, patient.Id, secondClinic.ClinicId),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.RemoveAsync(doctor.Id, patient.Id, firstClinic.ClinicId);
 
@@ -305,5 +305,253 @@ public class DoctorPatientServiceRemoveTests
         dbContext.Object.DoctorPatients.IgnoreQueryFilters()
             .Single(item => item.ClinicId == firstClinic.ClinicId)
             .IsEnabled.Should().BeFalse();
+    }
+}
+
+public class DoctorPatientServiceClinicFilterAndAddTests
+{
+    [Fact]
+    public async Task GetPatientsAsync_WhenClinicIdProvided_ReturnsOnlyThatClinic()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(name: "Alice Patient", phoneNumber: "+15551111111");
+        var firstClinic = ClinicBuilder.CreateDefault(doctor.Id);
+        var secondClinic = ClinicBuilder.Create(managerId: doctor.Id, name: "South Clinic");
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            clinics: [firstClinic, secondClinic],
+            clinicDoctors:
+            [
+                ClinicBuilder.CreateMembership(firstClinic.ClinicId, doctor.Id),
+                ClinicBuilder.CreateMembership(secondClinic.ClinicId, doctor.Id),
+            ],
+            doctorPatients:
+            [
+                DoctorPatientBuilder.Create(doctor.Id, patient.Id, firstClinic.ClinicId),
+                DoctorPatientBuilder.Create(doctor.Id, patient.Id, secondClinic.ClinicId),
+            ]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.GetPatientsAsync(doctor.Id, firstClinic.ClinicId);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value!.Single().ClinicId.Should().Be(firstClinic.ClinicId);
+        result.Value.Single().ClinicName.Should().Be(firstClinic.Name);
+    }
+
+    [Fact]
+    public async Task GetPendingRequestsAsync_WhenClinicIdProvided_ReturnsOnlyThatClinic()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var northPatient = ApplicationUserBuilder.Patient(name: "North", phoneNumber: "+15551111111");
+        var southPatient = ApplicationUserBuilder.Patient(name: "South", phoneNumber: "+15552222222");
+        var firstClinic = ClinicBuilder.CreateDefault(doctor.Id);
+        var secondClinic = ClinicBuilder.Create(managerId: doctor.Id, name: "South Clinic");
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, northPatient, southPatient],
+            clinics: [firstClinic, secondClinic],
+            clinicDoctors:
+            [
+                ClinicBuilder.CreateMembership(firstClinic.ClinicId, doctor.Id),
+                ClinicBuilder.CreateMembership(secondClinic.ClinicId, doctor.Id),
+            ],
+            doctorPatients:
+            [
+                DoctorPatientBuilder.Create(
+                    doctor.Id,
+                    northPatient.Id,
+                    firstClinic.ClinicId,
+                    status: DoctorPatientStatus.Pending),
+                DoctorPatientBuilder.Create(
+                    doctor.Id,
+                    southPatient.Id,
+                    secondClinic.ClinicId,
+                    status: DoctorPatientStatus.Pending),
+            ]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.GetPendingRequestsAsync(doctor.Id, secondClinic.ClinicId);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value!.Single().PatientId.Should().Be(southPatient.Id);
+        result.Value.Single().ClinicId.Should().Be(secondClinic.ClinicId);
+    }
+
+    [Fact]
+    public async Task AddPatientAsync_WhenDoctorBelongsToClinic_CreatesApprovedRelationship()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(name: "Alice Patient", phoneNumber: "+15551111111");
+        var clinic = ClinicBuilder.CreateDefault(doctor.Id);
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            clinics: [clinic],
+            clinicDoctors: [ClinicBuilder.CreateMembership(clinic.ClinicId, doctor.Id)]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.AddPatientAsync(doctor.Id, patient.Id, clinic.ClinicId);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.ClinicId.Should().Be(clinic.ClinicId);
+        result.Value.ClinicName.Should().Be(clinic.Name);
+        result.Value.PatientId.Should().Be(patient.Id);
+        dbContext.Object.DoctorPatients.Should().ContainSingle()
+            .Which.Status.Should().Be(DoctorPatientStatus.Approved);
+    }
+
+    [Fact]
+    public async Task AddPatientAsync_WhenDoctorNotInClinic_ReturnsFailure()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
+        var clinic = ClinicBuilder.CreateDefault(doctor.Id);
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            clinics: [clinic]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.AddPatientAsync(doctor.Id, patient.Id, clinic.ClinicId);
+
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().Contain(DoctorPatientErrors.DoctorNotInClinic);
+        dbContext.Object.DoctorPatients.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AddPatientAsync_WhenAlreadyLinkedInClinic_ReturnsFailure()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
+        var clinic = ClinicBuilder.CreateDefault(doctor.Id);
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            clinics: [clinic],
+            clinicDoctors: [ClinicBuilder.CreateMembership(clinic.ClinicId, doctor.Id)],
+            doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id, clinic.ClinicId)]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.AddPatientAsync(doctor.Id, patient.Id, clinic.ClinicId);
+
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().Contain(DoctorPatientErrors.AlreadyLinked);
+    }
+
+    [Fact]
+    public async Task AddPatientAsync_SamePatientInSecondClinic_CreatesSecondRelationship()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
+        var firstClinic = ClinicBuilder.CreateDefault(doctor.Id);
+        var secondClinic = ClinicBuilder.Create(managerId: doctor.Id, name: "South Clinic");
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            clinics: [firstClinic, secondClinic],
+            clinicDoctors:
+            [
+                ClinicBuilder.CreateMembership(firstClinic.ClinicId, doctor.Id),
+                ClinicBuilder.CreateMembership(secondClinic.ClinicId, doctor.Id),
+            ],
+            doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id, firstClinic.ClinicId)]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.AddPatientAsync(doctor.Id, patient.Id, secondClinic.ClinicId);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.ClinicId.Should().Be(secondClinic.ClinicId);
+        dbContext.Object.DoctorPatients.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task LookupPatientByPhoneAsync_WhenPatientExists_ReturnsLookup()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(name: "Alice Patient", phoneNumber: "+15551111111");
+        var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor, patient]);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.LookupPatientByPhoneAsync(doctor.Id, "+15551111111");
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.PatientId.Should().Be(patient.Id);
+        result.Value.PatientName.Should().Be("Alice Patient");
+    }
+
+    [Fact]
+    public async Task GetPatientExercisesAsync_WhenClinicIdDoesNotMatch_ReturnsNotFound()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
+        var firstClinic = ClinicBuilder.CreateDefault(doctor.Id);
+        var secondClinic = ClinicBuilder.Create(managerId: doctor.Id, name: "South Clinic");
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient],
+            clinics: [firstClinic, secondClinic],
+            clinicDoctors:
+            [
+                ClinicBuilder.CreateMembership(firstClinic.ClinicId, doctor.Id),
+                ClinicBuilder.CreateMembership(secondClinic.ClinicId, doctor.Id),
+            ],
+            doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id, firstClinic.ClinicId)]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, secondClinic.ClinicId);
+
+        result.Succeeded.Should().BeFalse();
+        result.Errors.Should().Contain(DoctorPatientErrors.PatientNotFound);
+    }
+
+    [Fact]
+    public async Task GetMyClinicsAsync_ReturnsMembershipsWithCounts()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var patient = ApplicationUserBuilder.Patient(phoneNumber: "+15551111111");
+        var pendingPatient = ApplicationUserBuilder.Patient(name: "Pending", phoneNumber: "+15552222222");
+        var firstClinic = ClinicBuilder.CreateDefault(doctor.Id);
+        var secondClinic = ClinicBuilder.Create(managerId: doctor.Id, name: "South Clinic");
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, patient, pendingPatient],
+            clinics: [firstClinic, secondClinic],
+            clinicDoctors:
+            [
+                ClinicBuilder.CreateMembership(firstClinic.ClinicId, doctor.Id),
+                ClinicBuilder.CreateMembership(secondClinic.ClinicId, doctor.Id),
+            ],
+            doctorPatients:
+            [
+                DoctorPatientBuilder.Create(doctor.Id, patient.Id, firstClinic.ClinicId),
+                DoctorPatientBuilder.Create(
+                    doctor.Id,
+                    pendingPatient.Id,
+                    secondClinic.ClinicId,
+                    status: DoctorPatientStatus.Pending),
+            ]);
+
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
+
+        var result = await sut.GetMyClinicsAsync(doctor.Id);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value.Should().HaveCount(2);
+        result.Value!.Single(item => item.ClinicId == firstClinic.ClinicId)
+            .ActivePatientCount.Should().Be(1);
+        result.Value.Single(item => item.ClinicId == secondClinic.ClinicId)
+            .PendingRequestCount.Should().Be(1);
     }
 }

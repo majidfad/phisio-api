@@ -15,10 +15,10 @@ public class DoctorPatientServiceGetPatientExercisesTests
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor, patient]);
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id);
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeFalse();
@@ -38,10 +38,10 @@ public class DoctorPatientServiceGetPatientExercisesTests
             users: [doctor, patient],
             doctorPatients: [relationship]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id);
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -70,10 +70,10 @@ public class DoctorPatientServiceGetPatientExercisesTests
                 AssignmentBuilder.Create(doctor.Id, patient.Id, newerExercise.ExerciseId, assignedAt: newerAssignedAt),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id);
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -104,10 +104,10 @@ public class DoctorPatientServiceGetPatientExercisesTests
                 AssignmentBuilder.Create(doctor.Id, patient.Id, inactiveExercise.ExerciseId, isActive: false),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id);
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -135,10 +135,10 @@ public class DoctorPatientServiceGetPatientExercisesTests
                 AssignmentBuilder.Create(otherDoctor.Id, patient.Id, otherExercise.ExerciseId),
             ]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id);
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -160,10 +160,10 @@ public class DoctorPatientServiceGetPatientExercisesTests
             doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id, isEnabled: false)],
             userExercises: [AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId)]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id);
+        var result = await sut.GetPatientExercisesAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeFalse();

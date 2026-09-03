@@ -17,7 +17,7 @@ public class AssignmentServiceGetPatientAssignmentsTests
         // Arrange
         var patient = ApplicationUserBuilder.Patient();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [patient]);
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.GetMyAssignmentsAsync(patient.Id);
@@ -60,7 +60,7 @@ public class AssignmentServiceGetPatientAssignmentsTests
             exercises: [stretch, roll],
             userExercises: [olderAssignment, newerAssignment, inactiveAssignment]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.GetMyAssignmentsAsync(patient.Id);
@@ -83,10 +83,10 @@ public class AssignmentServiceGetDoctorAssignmentsTests
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor, patient]);
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
-        var result = await sut.GetByPatientIdAsync(doctor.Id, patient.Id);
+        var result = await sut.GetByPatientIdAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeFalse();
@@ -123,10 +123,10 @@ public class AssignmentServiceGetDoctorAssignmentsTests
             userExercises: [olderAssignment, newerAssignment],
             doctorPatients: [doctorPatient]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
-        var result = await sut.GetByPatientIdAsync(doctor.Id, patient.Id);
+        var result = await sut.GetByPatientIdAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -149,7 +149,8 @@ public class AssignmentServiceCreateTests
         var request = new CreateAssignmentRequest
         {
             PatientId = patient.Id,
-            ExerciseId = exercise.ExerciseId
+            ExerciseId = exercise.ExerciseId,
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
         };
         var doctorPatient = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
 
@@ -158,7 +159,7 @@ public class AssignmentServiceCreateTests
             exercises: [exercise],
             doctorPatients: [doctorPatient]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.CreateAsync(doctor.Id, request);
@@ -182,11 +183,12 @@ public class AssignmentServiceCreateTests
         var request = new CreateAssignmentRequest
         {
             PatientId = Guid.NewGuid(),
-            ExerciseId = exercise.ExerciseId
+            ExerciseId = exercise.ExerciseId,
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor], exercises: [exercise]);
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.CreateAsync(doctor.Id, request);
@@ -207,13 +209,14 @@ public class AssignmentServiceCreateTests
         var request = new CreateAssignmentRequest
         {
             PatientId = patient.Id,
-            ExerciseId = Guid.NewGuid()
+            ExerciseId = Guid.NewGuid(),
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             doctorPatients: [doctorPatient]);
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.CreateAsync(doctor.Id, request);
@@ -240,7 +243,8 @@ public class AssignmentServiceCreateTests
         var request = new CreateAssignmentRequest
         {
             PatientId = patient.Id,
-            ExerciseId = exercise.ExerciseId
+            ExerciseId = exercise.ExerciseId,
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
         };
 
         var doctorPatient = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
@@ -251,7 +255,7 @@ public class AssignmentServiceCreateTests
             userExercises: [existingAssignment],
             doctorPatients: [doctorPatient]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.CreateAsync(doctor.Id, request);
@@ -274,6 +278,7 @@ public class AssignmentServiceCreateTests
         {
             PatientId = patient.Id,
             ExerciseId = exercise.ExerciseId,
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
         };
 
         var dbContext = AppDbContextMockFactory.CreateMock(
@@ -281,7 +286,7 @@ public class AssignmentServiceCreateTests
             exercises: [exercise],
             doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id, isEnabled: false)]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.CreateAsync(doctor.Id, request);
@@ -303,13 +308,15 @@ public class AssignmentServiceDeactivateTests
         var patient = ApplicationUserBuilder.Patient();
         var exercise = ExerciseBuilder.Create();
         var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId);
+        var doctorPatient = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             exercises: [exercise],
-            userExercises: [assignment]);
+            userExercises: [assignment],
+            doctorPatients: [doctorPatient]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.DeactivateAsync(doctor.Id, assignment.UserExerciseId);
@@ -325,7 +332,7 @@ public class AssignmentServiceDeactivateTests
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor]);
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.DeactivateAsync(doctor.Id, Guid.NewGuid());
@@ -351,7 +358,7 @@ public class AssignmentServiceDeactivateTests
             exercises: [exercise],
             userExercises: [assignment]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.DeactivateAsync(doctor.Id, assignment.UserExerciseId);
@@ -374,13 +381,15 @@ public class AssignmentServiceDeactivateTests
             patient.Id,
             exercise.ExerciseId,
             isActive: false);
+        var doctorPatient = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             exercises: [exercise],
-            userExercises: [assignment]);
+            userExercises: [assignment],
+            doctorPatients: [doctorPatient]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.DeactivateAsync(doctor.Id, assignment.UserExerciseId);
@@ -422,7 +431,7 @@ public class AssignmentServiceGetReportTests
             exercises: [stretch, squat, plank],
             userExercises: assignments);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.GetReportAsync();
@@ -458,7 +467,7 @@ public class AssignmentServiceGetReportTests
             exercises: [exercise],
             userExercises: [disabledAssignment]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.GetReportAsync();
@@ -478,12 +487,14 @@ public class AssignmentServiceGetReportTests
         exercise.IsEnabled = false;
         var assignment = AssignmentBuilder.Create(doctor.Id, patient.Id, exercise.ExerciseId);
 
+        var doctorPatient = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             exercises: [exercise],
-            userExercises: [assignment]);
+            userExercises: [assignment],
+            doctorPatients: [doctorPatient]);
 
-        var sut = new AssignmentService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(dbContext.Object);
 
         // Act
         var result = await sut.GetReportAsync();
@@ -497,7 +508,7 @@ public class AssignmentServiceGetReportTests
     public async Task GetReportAsync_WhenNoAssignmentsExist_ReturnsEmptyList()
     {
         // Arrange
-        var sut = new AssignmentService(AppDbContextMockFactory.CreateMock().Object);
+        var sut = DoctorPatientServiceTestFactory.CreateAssignmentService(AppDbContextMockFactory.CreateMock().Object);
 
         // Act
         var result = await sut.GetReportAsync();

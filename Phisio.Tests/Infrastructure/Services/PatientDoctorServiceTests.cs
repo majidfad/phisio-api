@@ -72,8 +72,13 @@ public class PatientDoctorServiceTests
         result.Value.Should().HaveCount(2);
         result.Value!.Single(item => item.DoctorId == linkedDoctor.Id)
             .RelationshipStatus.Should().Be(DoctorPatientStatus.Pending);
+        result.Value.Single(item => item.DoctorId == linkedDoctor.Id)
+            .Clinics.Should().ContainSingle()
+            .Which.ClinicId.Should().Be(clinic.ClinicId);
         result.Value.Single(item => item.DoctorId == otherDoctor.Id)
             .RelationshipStatus.Should().BeNull();
+        result.Value.Single(item => item.DoctorId == otherDoctor.Id)
+            .Clinics.Should().BeEmpty();
     }
 
     [Fact]

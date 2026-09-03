@@ -50,6 +50,7 @@ public class DoctorPatientServiceCreateProgramTests
             ProgramId = Guid.NewGuid(),
             DoctorId = doctorId,
             PatientId = patientId,
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
             StartDate = Yesterday,
             EndDate = Tomorrow,
             CadenceType = ExerciseProgramCadenceType.DaysOfWeek,
@@ -78,11 +79,11 @@ public class DoctorPatientServiceCreateProgramTests
             exercisePrograms: [deletedProgram],
             userExercises: [pastLeftover]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
         var result = await sut.CreateProgramAsync(
-            doctor.Id, patient.Id, DailyRequest(Yesterday, Tomorrow, exercise.ExerciseId));
+            doctor.Id, patient.Id, DailyRequest(Yesterday, Tomorrow, exercise.ExerciseId), DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -119,11 +120,11 @@ public class DoctorPatientServiceCreateProgramTests
             exercisePrograms: [deletedProgram],
             userExercises: [todayLeftover]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
         var result = await sut.CreateProgramAsync(
-            doctor.Id, patient.Id, DailyRequest(Today, Tomorrow, exercise.ExerciseId));
+            doctor.Id, patient.Id, DailyRequest(Today, Tomorrow, exercise.ExerciseId), DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -168,11 +169,11 @@ public class DoctorPatientServiceCreateProgramTests
             userExercises: [todayLeftover],
             exerciseCompletions: [completion]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
         var result = await sut.CreateProgramAsync(
-            doctor.Id, patient.Id, DailyRequest(Today, Tomorrow, exercise.ExerciseId));
+            doctor.Id, patient.Id, DailyRequest(Today, Tomorrow, exercise.ExerciseId), DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -213,11 +214,11 @@ public class DoctorPatientServiceCreateProgramTests
             doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id)],
             userExercises: [orphan]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
         var result = await sut.CreateProgramAsync(
-            doctor.Id, patient.Id, DailyRequest(Today, Today, exercise.ExerciseId));
+            doctor.Id, patient.Id, DailyRequest(Today, Today, exercise.ExerciseId), DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -257,7 +258,7 @@ public class DoctorPatientServiceCreateProgramTests
             exercisePrograms: [activeProgram],
             userExercises: [existingNeck, existingShoulder]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act — new program overlaps Monday: update Neck Stretch reps + add Back Extension
         var result = await sut.CreateProgramAsync(
@@ -267,7 +268,8 @@ public class DoctorPatientServiceCreateProgramTests
                 Today,
                 Today,
                 Item(neckStretch.ExerciseId, reps: "20"),
-                Item(backExtension.ExerciseId, reps: "12")));
+                Item(backExtension.ExerciseId, reps: "12")),
+            DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();

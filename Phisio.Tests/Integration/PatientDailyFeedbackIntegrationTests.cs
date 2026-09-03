@@ -528,6 +528,7 @@ public sealed class PatientDailyFeedbackIntegrationTests
         var doctorController = host.CreateDoctorPatientsController(scenario.Doctor.Id);
         var result = await doctorController.GetPatientExerciseHistory(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             page: 1,
             pageSize: 10,
             CancellationToken.None);
@@ -554,6 +555,7 @@ public sealed class PatientDailyFeedbackIntegrationTests
         var otherDoctorController = host.CreateDoctorPatientsController(scenario.OtherDoctor.Id);
         var result = await otherDoctorController.GetPatientExerciseHistory(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             page: 1,
             pageSize: 10,
             cancellationToken: CancellationToken.None);
@@ -665,7 +667,7 @@ public sealed class PatientDailyFeedbackIntegrationTests
             .SelectMany(fk => fk.Properties.Select(p => p.Name))
             .Should().Contain("DoctorId");
 
-        var expectedUnique = new[] { "DoctorId", "FeedbackDate", "PatientId" };
+        var expectedUnique = new[] { "ClinicId", "DoctorId", "FeedbackDate", "PatientId" };
         entityType.GetIndexes()
             .Where(index => index.IsUnique)
             .Select(index => index.Properties.Select(p => p.Name).OrderBy(n => n).ToArray())
@@ -747,6 +749,7 @@ public sealed class PatientDailyFeedbackIntegrationTests
         var doctorController = host.CreateDoctorPatientsController(scenario.Doctor.Id);
         var result = await doctorController.GetPatientExerciseStats(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             from: today,
             to: today,
             CancellationToken.None);

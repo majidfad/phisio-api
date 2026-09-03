@@ -1,6 +1,6 @@
 using FluentAssertions;
 using Moq;
-using Phisio.Application.Notifications;
+using Phisio.Application.Common;
 using Phisio.Application.PatientDailyFeedback;
 using Phisio.Application.PatientExercises;
 using Phisio.Domain.Enums;
@@ -51,13 +51,13 @@ public class PatientDailyFeedbackServiceSubmitTests
         var otherDoctor = ApplicationUserBuilder.Doctor(phoneNumber: "+15551110002");
         var patient = ApplicationUserBuilder.Patient();
         var relationship = DoctorPatientBuilder.Create(connectedDoctor.Id, patient.Id);
-        var notifications = new Mock<INotificationService>();
+        var domainEvents = new Mock<IDomainEventDispatcher>();
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [connectedDoctor, otherDoctor, patient],
             doctorPatients: [relationship]);
 
-        var sut = new PatientDailyFeedbackService(dbContext.Object, notifications.Object);
+        var sut = new PatientDailyFeedbackService(dbContext.Object, domainEvents: domainEvents.Object);
         var request = new SubmitDailyFeedbackRequest
         {
             DoctorId = otherDoctor.Id,
@@ -73,13 +73,9 @@ public class PatientDailyFeedbackServiceSubmitTests
         result.Errors.Should().ContainSingle()
             .Which.Should().Be(PatientDailyFeedbackErrors.DoctorNotFound);
         dbContext.Object.DailyPatientFeedbacks.Should().BeEmpty();
-        notifications.Verify(
-            service => service.NotifyAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<NotificationType>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
+        domainEvents.Verify(
+            service => service.DispatchAsync(
+                It.IsAny<Phisio.Domain.Common.IDomainEvent>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -92,13 +88,13 @@ public class PatientDailyFeedbackServiceSubmitTests
         var patient = ApplicationUserBuilder.Patient();
         var admin = ApplicationUserBuilder.Admin();
         var relationship = DoctorPatientBuilder.Create(doctor.Id, patient.Id);
-        var notifications = new Mock<INotificationService>();
+        var domainEvents = new Mock<IDomainEventDispatcher>();
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient, admin],
             doctorPatients: [relationship]);
 
-        var sut = new PatientDailyFeedbackService(dbContext.Object, notifications.Object);
+        var sut = new PatientDailyFeedbackService(dbContext.Object, domainEvents: domainEvents.Object);
         var request = new SubmitDailyFeedbackRequest
         {
             DoctorId = admin.Id,
@@ -114,13 +110,9 @@ public class PatientDailyFeedbackServiceSubmitTests
         result.Errors.Should().ContainSingle()
             .Which.Should().Be(PatientDailyFeedbackErrors.DoctorNotFound);
         dbContext.Object.DailyPatientFeedbacks.Should().BeEmpty();
-        notifications.Verify(
-            service => service.NotifyAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<NotificationType>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
+        domainEvents.Verify(
+            service => service.DispatchAsync(
+                It.IsAny<Phisio.Domain.Common.IDomainEvent>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -140,7 +132,7 @@ public class PatientDailyFeedbackServiceSubmitTests
             doctor.Id,
             exercise.ExerciseId,
             Today);
-        var notifications = new Mock<INotificationService>();
+        var domainEvents = new Mock<IDomainEventDispatcher>();
 
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
@@ -149,7 +141,7 @@ public class PatientDailyFeedbackServiceSubmitTests
             doctorPatients: [relationship],
             exerciseCompletions: [completion]);
 
-        var sut = new PatientDailyFeedbackService(dbContext.Object, notifications.Object);
+        var sut = new PatientDailyFeedbackService(dbContext.Object, domainEvents: domainEvents.Object);
         var request = new SubmitDailyFeedbackRequest
         {
             ImprovementScore = 4,
@@ -164,13 +156,9 @@ public class PatientDailyFeedbackServiceSubmitTests
         result.Errors.Should().ContainSingle()
             .Which.Should().Be(PatientDailyFeedbackErrors.DoctorNotFound);
         dbContext.Object.DailyPatientFeedbacks.Should().BeEmpty();
-        notifications.Verify(
-            service => service.NotifyAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<NotificationType>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
+        domainEvents.Verify(
+            service => service.DispatchAsync(
+                It.IsAny<Phisio.Domain.Common.IDomainEvent>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }

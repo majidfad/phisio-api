@@ -19,9 +19,9 @@ public class DoctorPatientServiceExerciseStatsTests
         var doctor = ApplicationUserBuilder.Doctor();
         var patient = ApplicationUserBuilder.Patient();
         var dbContext = AppDbContextMockFactory.CreateMock(users: [doctor, patient]);
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
-        var result = await sut.GetExerciseStatsAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseStatsAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         result.Succeeded.Should().BeFalse();
         result.Errors.Should().ContainSingle()
@@ -62,11 +62,12 @@ public class DoctorPatientServiceExerciseStatsTests
             exerciseCompletions: completions,
             dailyPatientFeedbacks: [feedback]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         var result = await sut.GetExerciseStatsAsync(
             doctor.Id,
             patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             from: TwoDaysAgo,
             to: Today);
 

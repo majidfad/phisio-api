@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Services;
+using Phisio.Infrastructure.Services.ReadModels;
 using Phisio.Tests.MockFactory;
 using Phisio.Tests.TestDataBuilder;
 
@@ -33,7 +35,7 @@ public class DoctorDashboardServiceGetDashboardTests
             users: [doctor, otherDoctor, alice, bob, charlie],
             doctorPatients: doctorPatients);
 
-        var sut = new DoctorDashboardService(dbContext.Object);
+        var sut = new DoctorDashboardService(new DoctorDashboardReadService(dbContext.Object));
 
         // Act
         var result = await sut.GetDashboardAsync(doctor.Id);
@@ -52,7 +54,8 @@ public class DoctorDashboardServiceGetDashboardTests
     {
         // Arrange
         var doctor = ApplicationUserBuilder.Doctor();
-        var sut = new DoctorDashboardService(AppDbContextMockFactory.CreateMock(users: [doctor]).Object);
+        var sut = new DoctorDashboardService(
+            new DoctorDashboardReadService(AppDbContextMockFactory.CreateMock(users: [doctor]).Object));
 
         // Act
         var result = await sut.GetDashboardAsync(doctor.Id);
@@ -86,7 +89,7 @@ public class DoctorDashboardServiceGetDashboardTests
             users: [doctor, ..patients],
             doctorPatients: doctorPatients);
 
-        var sut = new DoctorDashboardService(dbContext.Object);
+        var sut = new DoctorDashboardService(new DoctorDashboardReadService(dbContext.Object));
 
         // Act
         var result = await sut.GetDashboardAsync(doctor.Id);
@@ -119,7 +122,7 @@ public class DoctorDashboardServiceGetDashboardTests
             users: [doctor, activePatient, removedPatient],
             doctorPatients: doctorPatients);
 
-        var sut = new DoctorDashboardService(dbContext.Object);
+        var sut = new DoctorDashboardService(new DoctorDashboardReadService(dbContext.Object));
 
         // Act
         var result = await sut.GetDashboardAsync(doctor.Id);
@@ -129,5 +132,58 @@ public class DoctorDashboardServiceGetDashboardTests
         result.Value!.PatientsCount.Should().Be(1);
         result.Value.RecentPatients.Should().ContainSingle()
             .Which.PatientName.Should().Be("Active Patient");
+    }
+
+    [Fact]
+    public async Task GetDashboardAsync_WhenClinicIdProvided_FiltersCountsAndRecentPatients()
+    {
+        var doctor = ApplicationUserBuilder.Doctor();
+        var alice = ApplicationUserBuilder.Patient(name: "Alice Patient", phoneNumber: "+15551111111");
+        var bob = ApplicationUserBuilder.Patient(name: "Bob Patient", phoneNumber: "+15552222222");
+        var firstClinic = ClinicBuilder.CreateDefault(doctor.Id);
+        var secondClinic = ClinicBuilder.Create(managerId: doctor.Id, name: "South Clinic");
+
+        var dbContext = AppDbContextMockFactory.CreateMock(
+            users: [doctor, alice, bob],
+            clinics: [firstClinic, secondClinic],
+            clinicDoctors:
+            [
+                ClinicBuilder.CreateMembership(firstClinic.ClinicId, doctor.Id),
+                ClinicBuilder.CreateMembership(secondClinic.ClinicId, doctor.Id),
+            ],
+            doctorPatients:
+            [
+                DoctorPatientBuilder.Create(
+                    doctor.Id,
+                    alice.Id,
+                    firstClinic.ClinicId,
+                    createdAt: DateTime.UtcNow.AddDays(-1)),
+                DoctorPatientBuilder.Create(
+                    doctor.Id,
+                    bob.Id,
+                    secondClinic.ClinicId,
+                    createdAt: DateTime.UtcNow.AddDays(-2)),
+                DoctorPatientBuilder.Create(
+                    doctor.Id,
+                    bob.Id,
+                    firstClinic.ClinicId,
+                    status: DoctorPatientStatus.Pending),
+            ]);
+
+        var sut = new DoctorDashboardService(new DoctorDashboardReadService(dbContext.Object));
+
+        var allClinics = await sut.GetDashboardAsync(doctor.Id);
+        allClinics.Value!.PatientsCount.Should().Be(2);
+        allClinics.Value.PendingRequestsCount.Should().Be(1);
+        allClinics.Value.RecentPatients.Should().HaveCount(2);
+        allClinics.Value.RecentPatients.Should().OnlyContain(item =>
+            item.ClinicId != Guid.Empty && !string.IsNullOrWhiteSpace(item.ClinicName));
+
+        var southOnly = await sut.GetDashboardAsync(doctor.Id, secondClinic.ClinicId);
+        southOnly.Value!.PatientsCount.Should().Be(1);
+        southOnly.Value.PendingRequestsCount.Should().Be(0);
+        southOnly.Value.RecentPatients.Should().ContainSingle()
+            .Which.PatientName.Should().Be("Bob Patient");
+        southOnly.Value.RecentPatients.Single().ClinicId.Should().Be(secondClinic.ClinicId);
     }
 }

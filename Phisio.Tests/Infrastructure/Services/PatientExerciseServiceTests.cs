@@ -70,7 +70,7 @@ public class PatientExerciseServiceTests
         // Assert
         result.Succeeded.Should().BeTrue();
         result.Value.Should().NotBeNull();
-        result.Value!.DoctorName.Should().Be(doctor.Name);
+        result.Value!.DoctorName.Should().BeNull();
         result.Value.Exercises.Should().BeEmpty();
     }
 

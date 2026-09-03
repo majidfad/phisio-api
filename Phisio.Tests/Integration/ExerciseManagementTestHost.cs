@@ -26,6 +26,7 @@ using Phisio.Application.Notifications;
 using Phisio.Application.PatientDailyFeedback;
 using Phisio.Application.PatientDailyFeedback.Validators;
 using Phisio.Application.PatientExercises;
+using Phisio.Domain.CarePlans;
 using Phisio.Domain.Entities;
 using Phisio.Domain.Enums;
 using Phisio.Infrastructure.Identity;
@@ -70,15 +71,12 @@ internal sealed class ExerciseManagementTestHost : IAsyncDisposable
             .AddDefaultTokenProviders();
 
         services.AddScoped<IExerciseService, ExerciseService>();
+        services.AddCareRelationshipServices();
         services.AddScoped<IAssignmentService, AssignmentService>();
         services.AddScoped<IDoctorPatientService, DoctorPatientService>();
         services.AddScoped<IPatientExerciseService, PatientExerciseService>();
         services.AddScoped<IDoctorExerciseService, DoctorExerciseService>();
         services.AddScoped<IPatientDailyFeedbackService, PatientDailyFeedbackService>();
-
-        services.AddSingleton<RecordingNotificationService>();
-        services.AddSingleton<INotificationService>(sp =>
-            sp.GetRequiredService<RecordingNotificationService>());
 
         var videoUpload = new Mock<IExerciseVideoUploadService>();
         services.AddSingleton(videoUpload.Object);
@@ -247,7 +245,11 @@ internal static class ExerciseManagementTestHostSeeder
         var otherDoctor = ApplicationUserBuilder.Doctor(name: "Dr. Other", phoneNumber: "+15552000002");
         var otherPatient = ApplicationUserBuilder.Patient(name: "Bob Patient", phoneNumber: "+15551000002");
 
-        var clinicA = ClinicBuilder.Create(managerId: doctor.Id, name: "North Clinic", address: "North Address");
+        var clinicA = ClinicBuilder.Create(
+            ClinicBuilder.DefaultClinicId,
+            managerId: doctor.Id,
+            name: "North Clinic",
+            address: "North Address");
         var clinicDoctors = new List<ClinicDoctor>
         {
             ClinicBuilder.CreateMembership(clinicA.ClinicId, doctor.Id),
@@ -447,11 +449,15 @@ internal static class ExerciseManagementTestHelpers
         return await controller.UpdateExercise(exerciseId, request, cancellationToken);
     }
 
-    public static CreateAssignmentRequest CreateAssignmentRequest(Guid patientId, Guid exerciseId) =>
+    public static CreateAssignmentRequest CreateAssignmentRequest(
+        Guid patientId,
+        Guid exerciseId,
+        Guid? clinicId = null) =>
         new()
         {
             PatientId = patientId,
             ExerciseId = exerciseId,
+            ClinicId = clinicId ?? DoctorPatientBuilder.DefaultClinicId,
         };
 
     public static DateOnly Today => DateOnly.FromDateTime(DateTime.UtcNow);
@@ -504,6 +510,7 @@ internal static class ExerciseManagementTestHelpers
         DoctorPatientsController controller,
         Guid patientId,
         CreateExerciseProgramRequest request,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var validation = await new CreateExerciseProgramRequestValidator()
@@ -516,7 +523,11 @@ internal static class ExerciseManagementTestHelpers
             });
         }
 
-        return await controller.CreatePatientProgram(patientId, request, cancellationToken);
+        return await controller.CreatePatientProgram(
+            patientId,
+            request,
+            clinicId ?? DoctorPatientBuilder.DefaultClinicId,
+            cancellationToken);
     }
 
     public static async Task<IActionResult> UpdateProgramWithValidationAsync(
@@ -524,6 +535,7 @@ internal static class ExerciseManagementTestHelpers
         Guid patientId,
         Guid programId,
         UpdateExerciseProgramRequest request,
+        Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var validation = await new UpdateExerciseProgramRequestValidator()
@@ -536,7 +548,12 @@ internal static class ExerciseManagementTestHelpers
             });
         }
 
-        return await controller.UpdatePatientProgram(patientId, programId, request, cancellationToken);
+        return await controller.UpdatePatientProgram(
+            patientId,
+            programId,
+            request,
+            clinicId ?? DoctorPatientBuilder.DefaultClinicId,
+            cancellationToken);
     }
 
     public static IReadOnlyList<DateOnly> ExpectedScheduleDates(

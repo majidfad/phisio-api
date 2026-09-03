@@ -6,6 +6,7 @@ using Moq;
 using Phisio.Api.Controllers.Patient;
 using Phisio.Application.Common;
 using Phisio.Application.PatientDailyFeedback;
+using Phisio.Tests.TestDataBuilder;
 
 namespace Phisio.Tests.Api.Controllers.Patient;
 
@@ -27,6 +28,7 @@ public class PatientDailyFeedbackControllerTests
             Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
             patientId,
             doctorId,
+            DoctorPatientBuilder.DefaultClinicId,
             DateOnly.FromDateTime(DateTime.UtcNow),
             4,
             3,

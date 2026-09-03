@@ -221,7 +221,8 @@ public sealed class ExerciseAssignmentIntegrationTests
         var result = await patientController.GetExercises(
             scheduledDate: ExerciseManagementTestHelpers.Today,
             doctorId: null,
-            CancellationToken.None);
+            clinicId: null,
+            cancellationToken: CancellationToken.None);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var body = ok.Value!;
@@ -279,6 +280,7 @@ public sealed class ExerciseAssignmentIntegrationTests
 
         var result = await doctorController.GetPatientAssignments(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         var assignments = result.Should().BeOfType<OkObjectResult>().Subject
@@ -305,6 +307,7 @@ public sealed class ExerciseAssignmentIntegrationTests
             RoleNames.Doctor);
         var result = await otherDoctorController.GetPatientAssignments(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         result.Should().BeOfType<NotFoundObjectResult>();
@@ -466,33 +469,37 @@ public sealed class ExerciseAssignmentIntegrationTests
         result.Should().BeOfType<UnauthorizedResult>();
     }
 
-    // 21. Exercise assignment respects the existing Patient–Doctor–Clinic relationship.
+    // 21. Exercise assignment requires an approved relationship in the requested clinic.
     [Fact]
-    public async Task CreateAssignment_RequiresApprovedDoctorPatientRelationshipRegardlessOfClinic()
+    public async Task CreateAssignment_RequiresApprovedDoctorPatientRelationshipInClinic()
     {
         await using var host = await ExerciseManagementTestHost.CreateAsync();
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host, includeSecondClinic: true);
         var controller = host.CreateAssignmentsController(scenario.Doctor.Id, RoleNames.Doctor);
         var request = ExerciseManagementTestHelpers.CreateAssignmentRequest(
             scenario.Patient.Id,
-            scenario.AdminExercise.ExerciseId);
+            scenario.AdminExercise.ExerciseId,
+            scenario.ClinicAId);
 
         var result = await controller.CreateAssignment(request, CancellationToken.None);
 
         result.Should().BeOfType<CreatedAtActionResult>();
         (await host.DbContext.UserExercises.CountAsync()).Should().Be(1);
+        var assignment = await host.DbContext.UserExercises.SingleAsync();
+        assignment.ClinicId.Should().Be(scenario.ClinicAId);
     }
 
-    // 22. Multi-clinic relationship: assignment is not scoped by ClinicId.
+    // 22. Multi-clinic: assignments are scoped by ClinicId.
     [Fact]
-    public async Task CreateAssignment_WhenApprovedLinksExistInMultipleClinics_CreatesSingleAssignmentRow()
+    public async Task CreateAssignment_WhenApprovedLinksExistInMultipleClinics_CreatesClinicScopedAssignment()
     {
         await using var host = await ExerciseManagementTestHost.CreateAsync();
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host, includeSecondClinic: true);
         var controller = host.CreateAssignmentsController(scenario.Doctor.Id, RoleNames.Doctor);
         var request = ExerciseManagementTestHelpers.CreateAssignmentRequest(
             scenario.Patient.Id,
-            scenario.AdminExercise.ExerciseId);
+            scenario.AdminExercise.ExerciseId,
+            scenario.ClinicAId);
 
         await controller.CreateAssignment(request, CancellationToken.None);
 
@@ -507,26 +514,22 @@ public sealed class ExerciseAssignmentIntegrationTests
         assignments.Should().ContainSingle();
         assignments[0].DoctorId.Should().Be(scenario.Doctor.Id);
         assignments[0].PatientId.Should().Be(scenario.Patient.Id);
+        assignments[0].ClinicId.Should().Be(scenario.ClinicAId);
     }
 
-    // 23. Invalid/non-existing ClinicId is rejected where ClinicId is required.
+    // 23. CreateAssignmentRequest requires ClinicId.
     [Fact]
-    public void AssignmentEndpoints_DoNotAcceptClinicId_CurrentBehaviorIsDoctorPatientScoped()
+    public void CreateAssignmentRequest_IncludesClinicId()
     {
         typeof(CreateAssignmentRequest)
             .GetProperties()
             .Select(property => property.Name)
-            .Should().BeEquivalentTo(["PatientId", "ExerciseId"]);
-
-        typeof(AssignPatientExercisesRequest)
-            .GetProperties()
-            .Select(property => property.Name)
-            .Should().BeEquivalentTo(["Items", "ScheduledDates"]);
+            .Should().BeEquivalentTo(["PatientId", "ExerciseId", "ClinicId"]);
     }
 
-    // 24. Verify DoctorId, PatientId, ExerciseId persisted; UserExercise has no ClinicId.
+    // 24. Verify DoctorId, PatientId, ExerciseId, and ClinicId persisted on UserExercise.
     [Fact]
-    public async Task CreateAssignment_PersistsDoctorPatientExerciseIdsWithoutClinicId()
+    public async Task CreateAssignment_PersistsDoctorPatientExerciseAndClinicIds()
     {
         await using var host = await ExerciseManagementTestHost.CreateAsync();
         var scenario = await ExerciseManagementTestHostSeeder.SeedFullScenarioAsync(host);
@@ -534,7 +537,8 @@ public sealed class ExerciseAssignmentIntegrationTests
         await controller.CreateAssignment(
             ExerciseManagementTestHelpers.CreateAssignmentRequest(
                 scenario.Patient.Id,
-                scenario.AdminExercise.ExerciseId),
+                scenario.AdminExercise.ExerciseId,
+                scenario.ClinicAId),
             CancellationToken.None);
 
         host.DbContext.ChangeTracker.Clear();
@@ -542,14 +546,10 @@ public sealed class ExerciseAssignmentIntegrationTests
         assignment.DoctorId.Should().Be(scenario.Doctor.Id);
         assignment.PatientId.Should().Be(scenario.Patient.Id);
         assignment.ExerciseId.Should().Be(scenario.AdminExercise.ExerciseId);
-
-        typeof(UserExercise)
-            .GetProperties()
-            .Select(property => property.Name)
-            .Should().NotContain("ClinicId");
+        assignment.ClinicId.Should().Be(scenario.ClinicAId);
     }
 
-    // 25. Verify foreign keys and unique constraints.
+    // 25. Verify foreign keys and unique constraints include ClinicId.
     [Fact]
     public async Task UserExerciseModel_DefinesExpectedForeignKeysAndUniqueIndex()
     {
@@ -563,8 +563,9 @@ public sealed class ExerciseAssignmentIntegrationTests
         foreignKeys.Should().Contain("PatientId");
         foreignKeys.Should().Contain("DoctorId");
         foreignKeys.Should().Contain("ExerciseId");
+        foreignKeys.Should().Contain("ClinicId");
 
-        var expectedUniqueColumns = new[] { "DoctorId", "ExerciseId", "PatientId", "ScheduledDate" };
+        var expectedUniqueColumns = new[] { "DoctorId", "ExerciseId", "PatientId", "ClinicId", "ScheduledDate" };
         var uniqueIndex = entityType.GetIndexes()
             .Single(index =>
                 index.IsUnique
@@ -573,7 +574,7 @@ public sealed class ExerciseAssignmentIntegrationTests
                     .SequenceEqual(expectedUniqueColumns.OrderBy(name => name)));
         uniqueIndex.IsUnique.Should().BeTrue();
         uniqueIndex.Properties.Select(property => property.Name)
-            .Should().BeEquivalentTo(["PatientId", "DoctorId", "ExerciseId", "ScheduledDate"]);
+            .Should().BeEquivalentTo(["PatientId", "DoctorId", "ClinicId", "ExerciseId", "ScheduledDate"]);
     }
 
     // DoctorPatientsController path: doctor-owned exercises only.
@@ -590,6 +591,7 @@ public sealed class ExerciseAssignmentIntegrationTests
         var result = await controller.AssignPatientExercises(
             scenario.Patient.Id,
             request,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
@@ -613,6 +615,7 @@ public sealed class ExerciseAssignmentIntegrationTests
         var result = await controller.AssignPatientExercises(
             scenario.Patient.Id,
             request,
+            DoctorPatientBuilder.DefaultClinicId,
             CancellationToken.None);
 
         result.Should().BeOfType<ObjectResult>()

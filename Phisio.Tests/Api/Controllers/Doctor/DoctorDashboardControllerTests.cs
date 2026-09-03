@@ -46,15 +46,24 @@ public class DoctorDashboardControllerGetDashboardTests
         var doctorId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
         var dashboard = new DoctorDashboardDto(
             2,
+            1,
+            4,
+            2,
+            3,
             [
                 new DoctorDashboardRecentPatientDto(
                     Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7"),
                     "Alice Patient",
-                    "+15551111111")
+                    "+15551111111",
+                    Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                    "North Clinic")
             ]);
 
         var dashboardService = new Mock<IDoctorDashboardService>();
-        dashboardService.Setup(service => service.GetDashboardAsync(doctorId, It.IsAny<CancellationToken>()))
+        dashboardService.Setup(service => service.GetDashboardAsync(
+                doctorId,
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<DoctorDashboardDto>.Success(dashboard));
 
         var controller = DoctorDashboardControllerTestHelper.CreateController(

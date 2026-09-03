@@ -6,6 +6,7 @@ using Phisio.Application.Common;
 using Phisio.Application.PatientExercises;
 using Phisio.Api.Controllers.Patient;
 using Phisio.Domain.Enums;
+using Phisio.Tests.TestDataBuilder;
 using System.Security.Claims;
 
 namespace Phisio.Tests.Api.Controllers.Patient;
@@ -34,18 +35,20 @@ public class PatientExercisesControllerTests
                     true,
                     Sets: 3,
                     Reps: "10",
-                    PatientCue: null)
+                    PatientCue: null,
+                    DoctorPatientBuilder.DefaultClinicId,
+                    "Test Clinic")
             ]);
 
         var patientExerciseService = new Mock<IPatientExerciseService>();
         patientExerciseService
-            .Setup(service => service.GetExercisesAsync(patientId, null, null, It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetExercisesAsync(patientId, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<PatientExercisesResponse>.Success(response));
 
         var controller = CreateController(patientExerciseService, patientId);
 
         // Act
-        var result = await controller.GetExercises(null, null, CancellationToken.None);
+        var result = await controller.GetExercises(null, null, null, CancellationToken.None);
 
         // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -61,7 +64,7 @@ public class PatientExercisesControllerTests
         var controller = CreateController(patientExerciseService, userId: null);
 
         // Act
-        var result = await controller.GetExercises(null, null, CancellationToken.None);
+        var result = await controller.GetExercises(null, null, null, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<UnauthorizedResult>();
@@ -70,6 +73,7 @@ public class PatientExercisesControllerTests
             service => service.GetExercisesAsync(
                 It.IsAny<Guid>(),
                 It.IsAny<DateOnly?>(),
+                It.IsAny<Guid?>(),
                 It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
@@ -141,6 +145,8 @@ public class PatientExercisesControllerTests
             new PatientDoctorExerciseGroupDto(
                 Guid.Parse("11111111-1111-1111-1111-111111111111"),
                 "دکتر رحمانی",
+                DoctorPatientBuilder.DefaultClinicId,
+                "Test Clinic",
                 [
                     new PatientTodayExerciseItemDto(
                         userExerciseId,
@@ -153,19 +159,25 @@ public class PatientExercisesControllerTests
                         false,
                         Sets: 3,
                         Reps: "10",
-                        PatientCue: null),
+                        PatientCue: null,
+                        DoctorPatientBuilder.DefaultClinicId,
+                        "Test Clinic"),
                 ]),
         ]);
 
         var patientExerciseService = new Mock<IPatientExerciseService>();
         patientExerciseService
-            .Setup(service => service.GetTodayExercisesAsync(patientId, null, It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetTodayExercisesAsync(
+                patientId,
+                It.IsAny<Guid?>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(AuthResult<PatientTodayExercisesResponse>.Success(response));
 
         var controller = CreateController(patientExerciseService, patientId);
 
         // Act
-        var result = await controller.GetTodayExercises(null, CancellationToken.None);
+        var result = await controller.GetTodayExercises(null, null, CancellationToken.None);
 
         // Assert
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -181,7 +193,7 @@ public class PatientExercisesControllerTests
         var controller = CreateController(patientExerciseService, userId: null);
 
         // Act
-        var result = await controller.GetTodayExercises(null, CancellationToken.None);
+        var result = await controller.GetTodayExercises(null, null, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<UnauthorizedResult>();
@@ -189,6 +201,7 @@ public class PatientExercisesControllerTests
         patientExerciseService.Verify(
             service => service.GetTodayExercisesAsync(
                 It.IsAny<Guid>(),
+                It.IsAny<Guid?>(),
                 It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);

@@ -82,7 +82,10 @@ public sealed class PatientExerciseCompletionIntegrationTests
             isEnabled: false);
 
         var controller = host.CreatePatientExercisesController(scenario.Patient.Id);
-        var result = await controller.GetTodayExercises(doctorId: null, CancellationToken.None);
+        var result = await controller.GetTodayExercises(
+            doctorId: null,
+            clinicId: null,
+            cancellationToken: CancellationToken.None);
 
         var body = result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<PatientTodayExercisesResponse>().Subject;
@@ -383,6 +386,7 @@ public sealed class PatientExerciseCompletionIntegrationTests
         var doctorController = host.CreateDoctorPatientsController(scenario.Doctor.Id);
         var result = await doctorController.GetPatientExerciseHistory(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             page: 1,
             pageSize: 10,
             CancellationToken.None);
@@ -425,6 +429,7 @@ public sealed class PatientExerciseCompletionIntegrationTests
         var doctorController = host.CreateDoctorPatientsController(scenario.Doctor.Id);
         var result = await doctorController.GetPatientExerciseStats(
             scenario.Patient.Id,
+            DoctorPatientBuilder.DefaultClinicId,
             from: today,
             to: today,
             CancellationToken.None);

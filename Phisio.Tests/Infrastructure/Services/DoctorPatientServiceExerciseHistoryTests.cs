@@ -21,10 +21,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             users: [doctor, otherDoctor, patient],
             doctorPatients: [relationship]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeFalse();
@@ -44,10 +44,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             users: [doctor, patient],
             doctorPatients: [relationship]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -94,10 +94,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             userExercises: assignments,
             doctorPatients: [relationship]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -191,10 +191,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             doctorPatients: [relationship],
             exerciseCompletions: completions);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -244,10 +244,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             userExercises: assignments,
             doctorPatients: [relationship]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, page: 2, pageSize: 2);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId, page: 2, pageSize: 2);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -301,10 +301,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             doctorPatients: [relationship, otherRelationship],
             exerciseCompletions: completions);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -343,10 +343,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             exerciseCompletions: [completion],
             dailyPatientFeedbacks: [feedback]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -379,10 +379,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             doctorPatients: [relationship],
             exerciseCompletions: [completion]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -422,10 +422,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             exerciseCompletions: [completion],
             dailyPatientFeedbacks: [feedback]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();
@@ -467,10 +467,10 @@ public class DoctorPatientServiceGetExerciseHistoryTests
             exerciseCompletions: [completion],
             dailyPatientFeedbacks: [otherDoctorFeedback]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
         // Act
-        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id);
+        var result = await sut.GetExerciseHistoryAsync(doctor.Id, patient.Id, DoctorPatientBuilder.DefaultClinicId);
 
         // Assert
         result.Succeeded.Should().BeTrue();

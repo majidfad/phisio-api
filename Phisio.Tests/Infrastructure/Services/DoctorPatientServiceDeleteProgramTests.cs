@@ -23,9 +23,9 @@ public class DoctorPatientServiceDeleteProgramTests
         var dbContext = AppDbContextMockFactory.CreateMock(
             users: [doctor, patient],
             doctorPatients: [DoctorPatientBuilder.Create(doctor.Id, patient.Id)]);
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
-        var result = await sut.DeleteProgramAsync(doctor.Id, patient.Id, Guid.NewGuid());
+        var result = await sut.DeleteProgramAsync(doctor.Id, patient.Id, Guid.NewGuid(), DoctorPatientBuilder.DefaultClinicId);
 
         result.Succeeded.Should().BeFalse();
         result.Errors.Should().ContainSingle()
@@ -45,6 +45,7 @@ public class DoctorPatientServiceDeleteProgramTests
             ProgramId = programId,
             DoctorId = doctor.Id,
             PatientId = patient.Id,
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
             StartDate = Yesterday,
             EndDate = Tomorrow,
             CadenceType = ExerciseProgramCadenceType.DaysOfWeek,
@@ -93,9 +94,9 @@ public class DoctorPatientServiceDeleteProgramTests
             userExercises: [pastAssignment, todayIncomplete, todayCompleted, futureAssignment],
             exerciseCompletions: [completion]);
 
-        var sut = new DoctorPatientService(dbContext.Object);
+        var sut = DoctorPatientServiceTestFactory.Create(dbContext.Object);
 
-        var result = await sut.DeleteProgramAsync(doctor.Id, patient.Id, programId);
+        var result = await sut.DeleteProgramAsync(doctor.Id, patient.Id, programId, DoctorPatientBuilder.DefaultClinicId);
 
         result.Succeeded.Should().BeTrue();
 

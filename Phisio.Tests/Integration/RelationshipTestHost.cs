@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Phisio.Api.Controllers.Doctor;
 using Phisio.Api.Controllers.Patient;
 using Phisio.Application.Common;
+using Phisio.Application.DoctorDashboard;
 using Phisio.Application.DoctorPatients;
 using Phisio.Application.PatientDoctors;
 using Phisio.Domain.Entities;
@@ -55,8 +56,10 @@ internal sealed class RelationshipTestHost : IAsyncDisposable
             .AddEntityFrameworkStores<AppDbContext>()
             .AddDefaultTokenProviders();
 
+        services.AddCareRelationshipServices();
         services.AddScoped<IPatientDoctorService, PatientDoctorService>();
         services.AddScoped<IDoctorPatientService, DoctorPatientService>();
+        services.AddScoped<IDoctorDashboardService, DoctorDashboardService>();
 
         // Applied after defaults so tests can replace DbContext or other services.
         configureServices?.Invoke(services);
@@ -77,6 +80,12 @@ internal sealed class RelationshipTestHost : IAsyncDisposable
 
     public DoctorPatientsController CreateDoctorPatientsController(Guid? doctorId = null) =>
         new(_provider.GetRequiredService<IDoctorPatientService>())
+        {
+            ControllerContext = CreateControllerContext(doctorId, RoleNames.Doctor),
+        };
+
+    public DoctorDashboardController CreateDoctorDashboardController(Guid? doctorId = null) =>
+        new(_provider.GetRequiredService<IDoctorDashboardService>())
         {
             ControllerContext = CreateControllerContext(doctorId, RoleNames.Doctor),
         };
@@ -174,7 +183,11 @@ internal static class RelationshipTestHostSeeder
             medicalLicenseNumber: "MD-1001",
             clinicAddress: "123 Health St");
 
-        var clinicA = ClinicBuilder.Create(managerId: doctor.Id, name: clinicAName, address: "North Address");
+        var clinicA = ClinicBuilder.Create(
+            ClinicBuilder.DefaultClinicId,
+            managerId: doctor.Id,
+            name: clinicAName,
+            address: "North Address");
         var memberships = new List<ClinicDoctor>
         {
             ClinicBuilder.CreateMembership(clinicA.ClinicId, doctor.Id),
