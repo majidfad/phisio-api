@@ -12,12 +12,14 @@ internal static class DailyPatientFeedbackBuilder
         string? comment = null,
         DateOnly? feedbackDate = null,
         bool isEnabled = true,
-        Guid? id = null) =>
+        Guid? id = null,
+        Guid? clinicId = null) =>
         new()
         {
             DailyPatientFeedbackId = id ?? Guid.NewGuid(),
             PatientId = patientId,
             DoctorId = doctorId,
+            ClinicId = clinicId ?? DoctorPatientBuilder.DefaultClinicId,
             FeedbackDate = feedbackDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             ImprovementScore = improvementScore,
             HardnessScore = hardnessScore,

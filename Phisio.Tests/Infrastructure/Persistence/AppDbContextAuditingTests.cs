@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Phisio.Domain.Entities;
 using Phisio.Infrastructure.Persistence;
+using Phisio.Tests.TestDataBuilder;
 
 namespace Phisio.Tests.Infrastructure.Persistence;
 
@@ -44,6 +45,7 @@ public class AppDbContextAuditingTests
             UserExerciseId = Guid.NewGuid(),
             DoctorId = Guid.NewGuid(),
             PatientId = Guid.NewGuid(),
+            ClinicId = DoctorPatientBuilder.DefaultClinicId,
             ExerciseId = Guid.NewGuid(),
             AssignedAt = DateTime.UtcNow,
             ScheduledDate = DateOnly.FromDateTime(DateTime.UtcNow),

@@ -11,12 +11,14 @@ internal static class AssignmentBuilder
         bool isActive = true,
         Guid? id = null,
         DateTime? assignedAt = null,
-        DateOnly? scheduledDate = null) =>
+        DateOnly? scheduledDate = null,
+        Guid? clinicId = null) =>
         new()
         {
             UserExerciseId = id ?? Guid.NewGuid(),
             DoctorId = doctorId,
             PatientId = patientId,
+            ClinicId = clinicId ?? DoctorPatientBuilder.DefaultClinicId,
             ExerciseId = exerciseId,
             AssignedAt = assignedAt ?? DateTime.UtcNow,
             ScheduledDate = scheduledDate ?? DateOnly.FromDateTime(assignedAt ?? DateTime.UtcNow),
