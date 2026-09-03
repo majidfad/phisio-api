@@ -3,8 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Phisio.Application.Notifications;
-using Phisio.Application.PatientSettings;
 using Phisio.Domain.Enums;
+using Phisio.Infrastructure.Identity;
 using Phisio.Infrastructure.Persistence;
 using Phisio.Infrastructure.Services;
 
@@ -96,24 +96,20 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                 && u.Role == UserRole.Patient
                 && u.IsEnabled
                 && u.ExerciseRemindersEnabled)
-            .Select(u => new
-            {
-                u.Id,
-                u.PreferredReminderTime,
-                u.TimeZoneId,
-                u.ReminderRepeatMode,
-                u.ReminderDaysOfWeekMask,
-                u.ReminderIntervalDays,
-                u.ReminderAnchorDate,
-                u.ReminderFollowUpEnabled,
-                u.ReminderFollowUpTime,
-            })
             .ToListAsync(cancellationToken);
 
         if (patients.Count == 0)
         {
             return;
         }
+
+        var patientSettings = patients
+            .Select(user => new
+            {
+                user.Id,
+                Settings = user.ToReminderSettings(),
+            })
+            .ToList();
 
         var completions = await dbContext.ExerciseCompletions
             .AsNoTracking()
@@ -139,21 +135,15 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
 
         var requests = new List<CreateNotificationRequest>();
 
-        foreach (var patient in patients)
+        foreach (var patient in patientSettings)
         {
-            var timeZone = PatientSettingsService.ResolveTimeZone(patient.TimeZoneId);
+            var settings = patient.Settings;
+            var timeZone = settings.ResolveTimeZone();
             var localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
             var localToday = DateOnly.FromDateTime(localNow);
             var localTime = TimeOnly.FromDateTime(localNow);
 
-            if (!ReminderSchedule.IsReminderDay(
-                    localToday,
-                    patient.ReminderRepeatMode,
-                    patient.ReminderDaysOfWeekMask == 0
-                        ? ReminderSchedule.AllDaysMask
-                        : patient.ReminderDaysOfWeekMask,
-                    patient.ReminderIntervalDays,
-                    patient.ReminderAnchorDate))
+            if (!settings.IsReminderDay(localToday))
             {
                 continue;
             }
@@ -177,7 +167,7 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
             var hasFollowUp = patientReminders.Any(n =>
                 HasSlotForDate(n.Data, n.CreatedAt, localToday, timeZone, FollowUpSlot));
 
-            if (!hasPrimary && localTime >= patient.PreferredReminderTime)
+            if (!hasPrimary && localTime >= settings.PreferredReminderTime)
             {
                 requests.Add(BuildRequest(
                     patient.Id,
@@ -188,10 +178,10 @@ public sealed class ExerciseReminderBackgroundService : BackgroundService
                 hasPrimary = true;
             }
 
-            if (patient.ReminderFollowUpEnabled
+            if (settings.FollowUpEnabled
                 && hasPrimary
                 && !hasFollowUp
-                && localTime >= patient.ReminderFollowUpTime)
+                && localTime >= settings.FollowUpTime)
             {
                 requests.Add(BuildRequest(
                     patient.Id,

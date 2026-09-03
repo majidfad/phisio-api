@@ -3,15 +3,16 @@ using Microsoft.EntityFrameworkCore;
 using Phisio.Application.Common;
 using Phisio.Application.PatientSettings;
 using Phisio.Domain.Enums;
+using Phisio.Domain.Settings;
 using Phisio.Infrastructure.Identity;
 
 namespace Phisio.Infrastructure.Services;
 
 public class PatientSettingsService : IPatientSettingsService
 {
-    public const string DefaultTimeZoneId = "Asia/Tehran";
-    public static readonly TimeOnly DefaultReminderTime = new(9, 0);
-    public static readonly TimeOnly DefaultFollowUpTime = new(18, 0);
+    public const string DefaultTimeZoneId = PatientReminderSettings.DefaultTimeZoneId;
+    public static readonly TimeOnly DefaultReminderTime = PatientReminderSettings.DefaultPreferredTime;
+    public static readonly TimeOnly DefaultFollowUpTime = PatientReminderSettings.DefaultFollowUpTime;
 
     private readonly UserManager<ApplicationUser> _userManager;
 
@@ -30,7 +31,7 @@ public class PatientSettingsService : IPatientSettingsService
             return AuthResult<PatientReminderSettingsDto>.Failure(["Patient not found."]);
         }
 
-        return AuthResult<PatientReminderSettingsDto>.Success(Map(patient));
+        return AuthResult<PatientReminderSettingsDto>.Success(Map(patient.ToReminderSettings()));
     }
 
     public async Task<AuthResult<PatientReminderSettingsDto>> UpdateReminderSettingsAsync(
@@ -75,24 +76,22 @@ public class PatientSettingsService : IPatientSettingsService
             ? ReminderSchedule.AllDaysMask
             : Math.Clamp(request.DaysOfWeekMask, 0, ReminderSchedule.AllDaysMask);
 
-        patient.ExerciseRemindersEnabled = request.ExerciseRemindersEnabled;
-        patient.PreferredReminderTime = preferredTime;
-        patient.TimeZoneId = timeZoneId;
-        patient.ReminderRepeatMode = request.RepeatMode;
-        patient.ReminderDaysOfWeekMask = daysMask;
-        patient.ReminderIntervalDays = intervalDays;
-        patient.ReminderFollowUpEnabled = request.FollowUpEnabled;
-        patient.ReminderFollowUpTime = followUpTime;
+        var anchorDate = request.RepeatMode == ReminderRepeatMode.Interval
+            ? localToday
+            : patient.ReminderAnchorDate ?? localToday;
 
-        if (request.RepeatMode == ReminderRepeatMode.Interval)
-        {
-            // Reset the cadence anchor whenever interval settings are saved.
-            patient.ReminderAnchorDate = localToday;
-        }
-        else if (patient.ReminderAnchorDate is null)
-        {
-            patient.ReminderAnchorDate = localToday;
-        }
+        var settings = new PatientReminderSettings(
+            request.ExerciseRemindersEnabled,
+            preferredTime,
+            timeZoneId,
+            request.RepeatMode,
+            daysMask,
+            intervalDays,
+            anchorDate,
+            request.FollowUpEnabled,
+            followUpTime);
+
+        patient.ApplyReminderSettings(settings);
 
         var updateResult = await _userManager.UpdateAsync(patient);
         if (!updateResult.Succeeded)
@@ -101,7 +100,7 @@ public class PatientSettingsService : IPatientSettingsService
                 updateResult.Errors.Select(e => e.Description));
         }
 
-        return AuthResult<PatientReminderSettingsDto>.Success(Map(patient));
+        return AuthResult<PatientReminderSettingsDto>.Success(Map(patient.ToReminderSettings()));
     }
 
     private async Task<ApplicationUser?> FindPatientAsync(
@@ -112,19 +111,17 @@ public class PatientSettingsService : IPatientSettingsService
                 u => u.Id == patientId && u.Role == UserRole.Patient && u.IsEnabled,
                 cancellationToken);
 
-    private static PatientReminderSettingsDto Map(ApplicationUser patient) =>
+    private static PatientReminderSettingsDto Map(PatientReminderSettings settings) =>
         new(
-            patient.ExerciseRemindersEnabled,
-            patient.PreferredReminderTime.ToString("HH:mm"),
-            string.IsNullOrWhiteSpace(patient.TimeZoneId) ? DefaultTimeZoneId : patient.TimeZoneId,
-            patient.ReminderRepeatMode,
-            patient.ReminderDaysOfWeekMask == 0
-                ? ReminderSchedule.AllDaysMask
-                : patient.ReminderDaysOfWeekMask,
-            Math.Max(1, patient.ReminderIntervalDays),
-            patient.ReminderAnchorDate?.ToString("yyyy-MM-dd"),
-            patient.ReminderFollowUpEnabled,
-            patient.ReminderFollowUpTime.ToString("HH:mm"));
+            settings.ExerciseRemindersEnabled,
+            settings.PreferredReminderTime.ToString("HH:mm"),
+            settings.TimeZoneId,
+            settings.RepeatMode,
+            settings.EffectiveDaysOfWeekMask,
+            settings.EffectiveIntervalDays,
+            settings.AnchorDate?.ToString("yyyy-MM-dd"),
+            settings.FollowUpEnabled,
+            settings.FollowUpTime.ToString("HH:mm"));
 
     public static bool TryResolveTimeZone(string timeZoneId, out TimeZoneInfo timeZone)
     {

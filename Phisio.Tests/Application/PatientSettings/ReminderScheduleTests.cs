@@ -1,8 +1,8 @@
 using FluentAssertions;
-using Phisio.Application.PatientSettings;
 using Phisio.Domain.Enums;
+using Phisio.Domain.Settings;
 
-namespace Phisio.Tests.Application.PatientSettings;
+namespace Phisio.Tests.DomainModel.Settings;
 
 public class ReminderScheduleTests
 {

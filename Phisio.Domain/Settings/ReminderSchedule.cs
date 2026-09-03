@@ -1,6 +1,6 @@
 using Phisio.Domain.Enums;
 
-namespace Phisio.Application.PatientSettings;
+namespace Phisio.Domain.Settings;
 
 /// <summary>Evaluates whether a reminder should fire for a local calendar day.</summary>
 public static class ReminderSchedule
@@ -22,7 +22,7 @@ public static class ReminderSchedule
             ReminderRepeatMode.Interval =>
                 IsIntervalDay(localDate, Math.Max(1, intervalDays), anchorDate ?? localDate),
 
-            _ => true, // Daily
+            _ => true,
         };
     }
 

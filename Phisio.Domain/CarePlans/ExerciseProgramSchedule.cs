@@ -1,6 +1,6 @@
 using Phisio.Domain.Enums;
 
-namespace Phisio.Application.DoctorPatients;
+namespace Phisio.Domain.CarePlans;
 
 /// <summary>Expands program cadence rules into concrete schedule dates.</summary>
 public static class ExerciseProgramSchedule

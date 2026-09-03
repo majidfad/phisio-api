@@ -1,5 +1,6 @@
 using FluentValidation;
 using Phisio.Domain.Enums;
+using Phisio.Domain.Settings;
 
 namespace Phisio.Application.PatientSettings.Validators;
 

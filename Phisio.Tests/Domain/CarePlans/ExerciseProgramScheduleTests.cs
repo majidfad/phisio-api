@@ -1,8 +1,8 @@
 using FluentAssertions;
-using Phisio.Application.DoctorPatients;
+using Phisio.Domain.CarePlans;
 using Phisio.Domain.Enums;
 
-namespace Phisio.Tests.Application.DoctorPatients;
+namespace Phisio.Tests.DomainModel.CarePlans;
 
 public class ExerciseProgramScheduleTests
 {
