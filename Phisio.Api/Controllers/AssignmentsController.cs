@@ -55,6 +55,7 @@ public class AssignmentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPatientAssignments(
         Guid patientId,
+        [FromQuery] Guid clinicId,
         CancellationToken cancellationToken)
     {
         var doctorId = User.GetUserId();
@@ -66,6 +67,7 @@ public class AssignmentsController : ControllerBase
         var result = await _assignmentService.GetByPatientIdAsync(
             doctorId.Value,
             patientId,
+            clinicId,
             cancellationToken);
 
         if (!result.Succeeded)
@@ -112,11 +114,12 @@ public class AssignmentsController : ControllerBase
 
         if (!result.Succeeded)
         {
-            var statusCode = result.Errors.Any(e => e.Contains("not found", StringComparison.OrdinalIgnoreCase))
-                ? StatusCodes.Status404NotFound
-                : StatusCodes.Status400BadRequest;
+            if (result.Errors.Any(e => e.Contains("not found", StringComparison.OrdinalIgnoreCase)))
+            {
+                return NotFound(new { errors = result.Errors });
+            }
 
-            return StatusCode(statusCode, new { errors = result.Errors });
+            return BadRequest(new { errors = result.Errors });
         }
 
         return NoContent();

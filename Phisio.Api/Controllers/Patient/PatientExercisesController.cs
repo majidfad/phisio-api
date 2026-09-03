@@ -25,6 +25,7 @@ public class PatientExercisesController : ControllerBase
     public async Task<IActionResult> GetExercises(
         [FromQuery] DateOnly? scheduledDate = null,
         [FromQuery] Guid? doctorId = null,
+        [FromQuery] Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var patientId = User.GetUserId();
@@ -37,6 +38,7 @@ public class PatientExercisesController : ControllerBase
             patientId.Value,
             scheduledDate,
             doctorId,
+            clinicId,
             cancellationToken);
         return Ok(result.Value);
     }
@@ -47,6 +49,7 @@ public class PatientExercisesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetTodayExercises(
         [FromQuery] Guid? doctorId = null,
+        [FromQuery] Guid? clinicId = null,
         CancellationToken cancellationToken = default)
     {
         var patientId = User.GetUserId();
@@ -58,6 +61,7 @@ public class PatientExercisesController : ControllerBase
         var result = await _patientExerciseService.GetTodayExercisesAsync(
             patientId.Value,
             doctorId,
+            clinicId,
             cancellationToken);
         return Ok(result.Value);
     }

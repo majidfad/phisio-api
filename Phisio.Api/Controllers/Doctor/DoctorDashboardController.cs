@@ -22,7 +22,9 @@ public class DoctorDashboardController : ControllerBase
     [ProducesResponseType(typeof(DoctorDashboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetDashboard(
+        CancellationToken cancellationToken = default,
+        [FromQuery] Guid? clinicId = null)
     {
         var doctorId = User.GetUserId();
         if (doctorId is null)
@@ -30,7 +32,10 @@ public class DoctorDashboardController : ControllerBase
             return Unauthorized();
         }
 
-        var result = await _dashboardService.GetDashboardAsync(doctorId.Value, cancellationToken);
+        var result = await _dashboardService.GetDashboardAsync(
+            doctorId.Value,
+            clinicId,
+            cancellationToken);
         return Ok(result.Value);
     }
 }
