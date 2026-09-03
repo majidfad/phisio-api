@@ -281,6 +281,57 @@ public class ClinicService : IClinicService
         return AuthResult<IReadOnlyList<ClinicDoctorMemberDto>>.Success(members);
     }
 
+    public async Task<AuthResult<IReadOnlyList<ClinicPatientDto>>> GetPatientsAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        Guid? doctorId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var clinic = await FindAccessibleClinicAsync(access, clinicId, cancellationToken);
+        if (clinic is null)
+        {
+            return AuthResult<IReadOnlyList<ClinicPatientDto>>.Failure([ClinicErrors.NotFound]);
+        }
+
+        var query = _dbContext.DoctorPatients
+            .AsNoTracking()
+            .WhereActive()
+            .Where(dp => dp.ClinicId == clinicId);
+
+        if (doctorId is Guid filteredDoctorId)
+        {
+            query = query.Where(dp => dp.DoctorId == filteredDoctorId);
+        }
+
+        var patients = await query
+            .Join(
+                _dbContext.Users
+                    .AsNoTracking()
+                    .Where(user => user.Role == UserRole.Patient && user.IsEnabled),
+                dp => dp.PatientId,
+                patient => patient.Id,
+                (dp, patient) => new { Relation = dp, Patient = patient })
+            .Join(
+                _dbContext.Users.AsNoTracking().Where(user => user.IsEnabled),
+                item => item.Relation.DoctorId,
+                doctor => doctor.Id,
+                (item, doctor) => new { item.Relation, item.Patient, Doctor = doctor })
+            .OrderBy(item => item.Patient.Name)
+            .ThenBy(item => item.Doctor.Name)
+            .Select(item => new ClinicPatientDto(
+                item.Patient.Id,
+                item.Patient.Name,
+                item.Patient.PhoneNumber ?? string.Empty,
+                item.Relation.CreatedAt,
+                clinic.ClinicId,
+                clinic.Name,
+                item.Doctor.Id,
+                item.Doctor.Name))
+            .ToListAsync(cancellationToken);
+
+        return AuthResult<IReadOnlyList<ClinicPatientDto>>.Success(patients);
+    }
+
     public async Task<AuthResult<ClinicDoctorMemberDto>> AddDoctorAsync(
         ClinicAccessContext access,
         Guid clinicId,
@@ -595,6 +646,7 @@ public class ClinicService : IClinicService
             doctor.PhoneNumber!,
             doctor.Role,
             profile?.Specialty ?? string.Empty,
+            profile?.MedicalLicenseNumber ?? string.Empty,
             doctor.Id == clinicManagerId);
 
     private static IQueryable<Clinic> ApplyAccessFilter(IQueryable<Clinic> query, ClinicAccessContext access) =>

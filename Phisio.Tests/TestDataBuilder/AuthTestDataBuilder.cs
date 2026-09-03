@@ -48,6 +48,7 @@ internal static class AuthServiceTestHelper
                             "+15550000000",
                             UserRole.Doctor,
                             "Specialty",
+                            "MD-1",
                             IsClinicManager: true),
                         ClinicCreated: true))));
 

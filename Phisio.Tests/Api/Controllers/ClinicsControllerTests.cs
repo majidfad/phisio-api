@@ -170,7 +170,7 @@ public class ClinicsControllerDoctorManagementTests
         var clinicId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
         var doctors = new List<ClinicDoctorMemberDto>
         {
-            new(managerId, "Manager", "+15551111111", Domain.Enums.UserRole.ClinicManager, "General", true),
+            new(managerId, "Manager", "+15551111111", Domain.Enums.UserRole.ClinicManager, "General", "MD-1", true),
         };
 
         var clinicService = new Mock<IClinicService>();
@@ -188,6 +188,43 @@ public class ClinicsControllerDoctorManagementTests
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().BeEquivalentTo(doctors);
+    }
+
+    [Fact]
+    public async Task GetClinicPatients_WhenSucceeded_ReturnsOk()
+    {
+        var managerId = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+        var clinicId = Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7");
+        var patientId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var patients = new List<ClinicPatientDto>
+        {
+            new(
+                patientId,
+                "Patient A",
+                "+15553333333",
+                DateTime.UtcNow,
+                clinicId,
+                "Clinic A",
+                managerId,
+                "Manager"),
+        };
+
+        var clinicService = new Mock<IClinicService>();
+        clinicService.Setup(service => service.GetPatientsAsync(
+                It.IsAny<ClinicAccessContext>(),
+                clinicId,
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AuthResult<IReadOnlyList<ClinicPatientDto>>.Success(patients));
+
+        var controller = ClinicsControllerTestHelper.CreateController(
+            clinicService,
+            ClinicsControllerTestHelper.CreateClinicManager(managerId));
+
+        var result = await controller.GetClinicPatients(clinicId, null, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(patients);
     }
 
     [Fact]

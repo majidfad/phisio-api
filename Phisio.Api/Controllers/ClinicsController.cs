@@ -220,6 +220,36 @@ public class ClinicsController : ControllerBase
         return Ok(result.Value);
     }
 
+    [HttpGet("{clinicId:guid}/patients")]
+    [ProducesResponseType(typeof(IReadOnlyList<ClinicPatientDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClinicPatients(
+        Guid clinicId,
+        [FromQuery] Guid? doctorId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccessContext();
+        if (access is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _clinicService.GetPatientsAsync(
+            access,
+            clinicId,
+            doctorId,
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return NotFound(new { errors = result.Errors });
+        }
+
+        return Ok(result.Value);
+    }
+
     [HttpPost("{clinicId:guid}/doctors/{doctorId:guid}")]
     [ProducesResponseType(typeof(ClinicDoctorMemberDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

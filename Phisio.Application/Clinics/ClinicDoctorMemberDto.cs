@@ -8,4 +8,5 @@ public sealed record ClinicDoctorMemberDto(
     string PhoneNumber,
     UserRole Role,
     string Specialty,
+    string MedicalLicenseNumber,
     bool IsClinicManager);

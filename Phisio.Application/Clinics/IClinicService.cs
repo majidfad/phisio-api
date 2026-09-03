@@ -41,6 +41,12 @@ public interface IClinicService
         Guid clinicId,
         CancellationToken cancellationToken = default);
 
+    Task<AuthResult<IReadOnlyList<ClinicPatientDto>>> GetPatientsAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        Guid? doctorId = null,
+        CancellationToken cancellationToken = default);
+
     Task<AuthResult<ClinicDoctorMemberDto>> AddDoctorAsync(
         ClinicAccessContext access,
         Guid clinicId,

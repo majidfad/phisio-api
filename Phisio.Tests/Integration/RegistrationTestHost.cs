@@ -225,6 +225,13 @@ internal sealed class AssignFailingClinicService : IClinicService
         CancellationToken cancellationToken = default) =>
         _inner.GetDoctorsAsync(access, clinicId, cancellationToken);
 
+    public Task<AuthResult<IReadOnlyList<ClinicPatientDto>>> GetPatientsAsync(
+        ClinicAccessContext access,
+        Guid clinicId,
+        Guid? doctorId = null,
+        CancellationToken cancellationToken = default) =>
+        _inner.GetPatientsAsync(access, clinicId, doctorId, cancellationToken);
+
     public Task<AuthResult<ClinicDoctorMemberDto>> AddDoctorAsync(
         ClinicAccessContext access,
         Guid clinicId,
